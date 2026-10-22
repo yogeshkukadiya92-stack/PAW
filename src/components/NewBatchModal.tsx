@@ -1,3 +1,4 @@
+import { useDialog } from '@/lib/use-dialog';
 import React, { useState } from 'react';
 import { X, Calendar, MapPin, Video, Users, CheckSquare, Plus } from 'lucide-react';
 import { PAWBatch, ICLMember, WorkshopType } from '@/types/paw';
@@ -9,12 +10,14 @@ interface NewBatchModalProps {
   onBatchCreated: (batch: PAWBatch) => void;
 }
 
-export const NewBatchModal: React.FC<NewBatchModalProps> = ({
+const NewBatchModalContent: React.FC<NewBatchModalProps> = ({
   isOpen,
   onClose,
   availableMembers,
   onBatchCreated,
 }) => {
+  const dialogRef = useDialog(onClose);
+  const [error, setError] = useState('');
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [type, setType] = useState<WorkshopType>('Offline');
@@ -22,18 +25,14 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [targetRegistrations, setTargetRegistrations] = useState(100);
-  const [pawHeadId, setPawHeadId] = useState(availableMembers[0]?.id || '');
+  const [pawHeadId, setPawHeadId] = useState(availableMembers.find(m => m.role === 'PAW_HEAD')?.id || '');
   
-  // Creation Meeting Checklist
-  const [meetingDone, setMeetingDone] = useState(true);
-  const [rolesExplained, setRolesExplained] = useState(true);
-  const [callingAllocated, setCallingAllocated] = useState(true);
-
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !startDate || !endDate) return;
+    if (!name.trim() || !startDate || !endDate) { setError('Enter a batch name and both workshop dates.'); return; }
+    if (endDate < startDate) { setError('End date must be on or after the start date.'); return; }
 
     // Calculate Welcome Start Date as T-7 days before startDate
     const start = new Date(startDate);
@@ -42,11 +41,11 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
     const welcomeStartStr = welcomeDate.toISOString().split('T')[0];
 
     const newBatch: PAWBatch = {
-      id: `batch-${Date.now()}`,
-      name,
+      id: `batch-${crypto.randomUUID()}`,
+      name: name.trim(),
       code: code || `PAW-${type.toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`,
       type,
-      venueOrLink: venueOrLink || (type === 'Online' ? 'Zoom Live Interactive Room' : 'ICL Foundation Center'),
+      venueOrLink: venueOrLink.trim(),
       startDate,
       endDate,
       welcomeStartDate: welcomeStartStr,
@@ -61,7 +60,7 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="NewBatch" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xl my-8">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -70,7 +69,7 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
             <p className="text-xs text-slate-500">PAW Creation, Dates, Head Assignment & Team Roster</p>
           </div>
           <button
-            onClick={onClose}
+            aria-label="Close dialog" onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
           >
             <X className="w-5 h-5" />
@@ -79,6 +78,7 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
           {/* PAW Batch Title & Code */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
@@ -177,6 +177,7 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
               <input
                 type="date"
                 required
+                min={startDate}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
@@ -207,49 +208,13 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
               onChange={(e) => setPawHeadId(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
             >
-              {availableMembers.map((m) => (
+              <option value="">Assign later</option>
+              {availableMembers.filter(m => m.role === 'PAW_HEAD').map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.role.replace('_', ' ')}) — {m.phone}
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* Creation Meeting & Roles Checklist */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
-              <span>Creation Checklist</span>
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-              <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={meetingDone}
-                  onChange={(e) => setMeetingDone(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-0 border-slate-300"
-                />
-                <span>Creation Meeting Done</span>
-              </label>
-              <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={rolesExplained}
-                  onChange={(e) => setRolesExplained(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-0 border-slate-300"
-                />
-                <span>Roles & Responsibilities Defined</span>
-              </label>
-              <label className="flex items-center space-x-2 text-slate-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={callingAllocated}
-                  onChange={(e) => setCallingAllocated(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-0 border-slate-300"
-                />
-                <span>Capacity Allocated</span>
-              </label>
-            </div>
           </div>
 
           {/* Actions */}
@@ -272,4 +237,9 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const NewBatchModal: React.FC<NewBatchModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <NewBatchModalContent {...props} />;
 };

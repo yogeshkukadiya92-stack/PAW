@@ -12,6 +12,19 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3001',
+        changeOrigin: false,
+        configure(proxy) {
+          proxy.on('proxyReq', (outgoing, incoming) => {
+            outgoing.setHeader('X-PAW-Dev-Peer', incoming.socket.remoteAddress || 'unknown');
+          });
+        },
+      },
+    },
+    watch: { ignored: ['**/data/**'] },
+    fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/data/**', '**/*.sqlite*', '**/server/**'] },
     host: '0.0.0.0',
     cors: true,
     allowedHosts: true,

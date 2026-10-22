@@ -1,20 +1,20 @@
-# Step 1: Build the Vite project
-FROM node:20-alpine AS builder
-
+FROM node:24-alpine AS builder
 WORKDIR /app
-
 COPY package*.json ./
 RUN npm ci --include=dev
-
 COPY . .
 RUN npm run build
 
-# Step 2: Serve using high-performance Nginx Alpine
-FROM nginx:alpine
-
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+FROM node:24-alpine
+WORKDIR /app
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=3001 PAW_DATABASE_PATH=/app/data/paw.sqlite
+COPY --from=builder /app/dist ./dist
+COPY server ./server
+COPY shared ./shared
+COPY scripts/start.mjs ./scripts/start.mjs
+COPY package.json ./package.json
+RUN mkdir -p /app/data && chown -R node:node /app/data
+USER node
+VOLUME ["/app/data"]
+EXPOSE 3001
+CMD ["node", "scripts/start.mjs"]

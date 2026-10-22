@@ -58,3 +58,36 @@
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
+
+@layer base {
+  html { min-width: 320px; }
+  body { margin: 0; min-height: 100dvh; }
+  button, input, select, textarea { font: inherit; }
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 3px;
+  }
+  button:disabled { cursor: not-allowed; opacity: .55; }
+}
+
+[role="dialog"] { overscroll-behavior: contain; }
+[role="dialog"] > div:first-child {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px !important; }
+  header .max-w-xs { max-width: min(18rem, 75vw); }
+  button { min-height: 36px; }
+  [role="dialog"] > div:first-child { padding: 1rem; margin-block: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+@layer components {
+  .auth-label { @apply block text-sm font-semibold text-slate-700 mb-1.5; }
+  .auth-input { @apply w-full min-h-[44px] rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100; }
+  .auth-primary { @apply inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition; }
+  .auth-secondary { @apply inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700; }
+}

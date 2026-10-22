@@ -100,6 +100,7 @@ export interface DailyFollowupLog {
 }
 
 export interface Participant {
+  assessmentReports?: import('@/lib/assessment').AssessmentReport[];
   id: string;
   loginId: string;
   pawBatchId: string;

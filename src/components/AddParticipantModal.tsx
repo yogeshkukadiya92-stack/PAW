@@ -1,3 +1,4 @@
+import { useDialog } from '@/lib/use-dialog';
 import React, { useState } from 'react';
 import { X, UserPlus, Check, AlertCircle } from 'lucide-react';
 import { ICLMember, Participant, PreferredLanguage } from '@/types/paw';
@@ -12,7 +13,7 @@ interface AddParticipantModalProps {
   onAddParticipant: (participant: Participant) => void;
 }
 
-export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
+const AddParticipantModalContent: React.FC<AddParticipantModalProps> = ({
   isOpen,
   onClose,
   welcomeMembers,
@@ -21,6 +22,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
   existingCount,
   onAddParticipant,
 }) => {
+  const dialogRef = useDialog(onClose);
   if (!isOpen) return null;
 
   const [fullName, setFullName] = useState('');
@@ -44,18 +46,18 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
 
     const nextNumber = String(existingCount + 1).padStart(3, '0');
     const newParticipant: Participant = {
-      id: `part-${Date.now()}`,
-      loginId: `${batchCode || 'PAW'}-${nextNumber}`,
+      id: `part-${crypto.randomUUID()}`,
+      loginId: `${batchCode || 'PAW'}-${crypto.randomUUID().slice(0,8).toUpperCase()}`,
       pawBatchId: batchId,
       fullName: fullName.trim(),
       phone: cleanPhone,
       whatsappNumber: cleanPhone,
       preferredLanguage,
-      city: city.trim() || 'Ahmedabad',
+      city: city.trim(),
       registeredAt: new Date().toISOString().split('T')[0],
       registrationStatus: 'Confirmed',
       whatsappGroupJoined: false,
-      assignedWelcomeIclMemberId: assignedMemberId || welcomeMembers[0]?.id,
+      assignedWelcomeIclMemberId: assignedMemberId || welcomeMembers[0]?.id || '',
       welcomeCallStatus: 'Pending',
       welcomeChecklist: {
         verified: false,
@@ -76,7 +78,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="AddParticipant" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-xl p-6 space-y-5 my-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -94,7 +96,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            aria-label="Close dialog" onClick={onClose}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
           >
             <X className="w-4 h-4" />
@@ -162,6 +164,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
                 onChange={(e) => setAssignedMemberId(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
               >
+                <option value="">Unassigned</option>
                 {welcomeMembers.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name} (Welcome Team)
@@ -213,4 +216,9 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const AddParticipantModal: React.FC<AddParticipantModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <AddParticipantModalContent {...props} />;
 };

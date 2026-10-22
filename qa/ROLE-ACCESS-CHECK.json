@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-10-22T14:26:01.329Z",
+  "environment": "http://localhost:5173",
+  "results": [
+    {
+      "role": "PAW_HEAD",
+      "login": "demo.admin",
+      "participants": 1,
+      "leads": 1,
+      "accountManagement": true,
+      "checks": "passed"
+    },
+    {
+      "role": "LEADER_HEAD",
+      "login": "demo.head",
+      "participants": 1,
+      "leads": 1,
+      "accountManagement": false,
+      "checks": "passed"
+    },
+    {
+      "role": "LEADER",
+      "login": "demo.leader",
+      "participants": 1,
+      "leads": 1,
+      "accountManagement": false,
+      "checks": "passed"
+    },
+    {
+      "role": "CALLING_MEMBER",
+      "login": "demo.calling",
+      "participants": 1,
+      "leads": 1,
+      "accountManagement": false,
+      "checks": "passed"
+    },
+    {
+      "role": "WELCOME_MEMBER",
+      "login": "demo.welcome",
+      "participants": 1,
+      "leads": 0,
+      "accountManagement": false,
+      "checks": "passed"
+    },
+    {
+      "role": "PARTICIPANT",
+      "login": "demo.participant",
+      "participants": 1,
+      "leads": 0,
+      "accountManagement": false,
+      "checks": "passed"
+    }
+  ]
+}

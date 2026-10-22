@@ -43,9 +43,10 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddingLead, setIsAddingLead] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [leadError, setLeadError] = useState('');
   const [newLeadName, setNewLeadName] = useState('');
   const [newLeadPhone, setNewLeadPhone] = useState('');
-  const [newLeadCity, setNewLeadCity] = useState('Ahmedabad');
+  const [newLeadCity, setNewLeadCity] = useState('');
   const [newLeadMemberId, setNewLeadMemberId] = useState(callingMembers[0]?.id || '');
 
 
@@ -80,8 +81,11 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
 
   const handleCreateLead = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLeadName || !newLeadPhone) return;
-    onAddNewLead(newLeadName, newLeadPhone, newLeadCity, newLeadMemberId);
+    if (!newLeadName.trim() || !/^\+?[\d\s()-]{10,20}$/.test(newLeadPhone) || newLeadPhone.replace(/\D/g, '').length < 10) { setLeadError('Enter a name and a valid mobile number.'); return; }
+    const memberId = newLeadMemberId || callingMembers.find(m => m.isAvailable)?.id;
+    if (!memberId) { setLeadError('Add an available calling member in Team before saving a lead.'); return; }
+    setLeadError('');
+    onAddNewLead(newLeadName.trim(), newLeadPhone.replace(/\D/g, ''), newLeadCity.trim(), memberId);
     setNewLeadName('');
     setNewLeadPhone('');
     setIsAddingLead(false);
@@ -118,7 +122,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
             <span className="font-semibold text-slate-800">Process:</span>
             <span>Data Allocate</span>
             <span className="text-slate-400">→</span>
@@ -192,7 +196,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
       <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Search Box */}
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-72 min-w-0">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -203,7 +207,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
             />
           </div>
 
-          <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {/* Filter by Member */}
             <select
               aria-label="Filter by Calling Member"
@@ -279,6 +283,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
       {isAddingLead && (
         <form onSubmit={handleCreateLead} className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm space-y-3">
           <h4 className="text-xs font-bold text-slate-900">Add New Participant Contact Lead:</h4>
+          {leadError && <p role="alert" className="text-sm text-rose-700">{leadError}</p>}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
             <div>
               <label className="block text-slate-600 mb-1">Full Name *</label>
@@ -294,7 +299,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
             <div>
               <label className="block text-slate-600 mb-1">Mobile Number *</label>
               <input
-                type="text"
+                type="tel"
                 required
                 placeholder="+91 98250 12345"
                 value={newLeadPhone}
@@ -318,7 +323,8 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
                 onChange={(e) => setNewLeadMemberId(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
               >
-                {callingMembers.map((m) => (
+                <option value="">Select calling member</option>
+              {callingMembers.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name} ({m.callingCapacity} Cap)
                   </option>

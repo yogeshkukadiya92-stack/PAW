@@ -1,3 +1,19 @@
+function downloadCSV(rows: unknown[][], filename: string) {
+  const csv = '\uFEFF' + rows.map(row => row.map(value => {
+    const text = String(value ?? '');
+    const safe = /^[=+@-]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
+  }).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename.replace(/[\\/:*?"<>|]/g, '_');
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 import { CallingLead, Participant, ICLMember } from '@/types/paw';
 
 export const exportLeadsToCSV = (leads: CallingLead[], members: ICLMember[], batchName: string) => {
@@ -8,24 +24,17 @@ export const exportLeadsToCSV = (leads: CallingLead[], members: ICLMember[], bat
     const lastRemark = lead.callLogs?.[0]?.note || '';
     return [
       lead.id,
-      `"${lead.fullName.replace(/"/g, '""')}"`,
+      lead.fullName,
       lead.phone,
-      `"${lead.city}"`,
-      `"${member?.name || '-'}"`,
+      lead.city,
+      member?.name || '-',
       lead.callStatus,
-      `"${lastRemark.replace(/"/g, '""')}"`,
+      lastRemark,
       lead.nextFollowupDate || '-',
     ];
   });
 
-  const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `PAW_Calling_Leads_${batchName.replace(/\s+/g, '_')}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadCSV([headers, ...rows], `PAW_Calling_Leads_${batchName.replace(/\s+/g, '_')}.csv`);
 };
 
 export const exportParticipantsToCSV = (participants: Participant[], members: ICLMember[], batchName: string) => {
@@ -48,26 +57,19 @@ export const exportParticipantsToCSV = (participants: Participant[], members: IC
     const member = members.find((m) => m.id === p.assignedWelcomeIclMemberId);
     return [
       p.loginId,
-      `"${p.fullName.replace(/"/g, '""')}"`,
+      p.fullName,
       p.phone,
       p.whatsappNumber,
       p.preferredLanguage.toUpperCase(),
-      `"${p.city}"`,
+      p.city,
       p.registeredAt,
       p.whatsappGroupJoined ? 'Joined' : 'Pending',
-      `"${member?.name || '-'}"`,
+      member?.name || '-',
       p.welcomeCallStatus,
       p.firstAssignmentStatus,
-      `"${p.personalityType || 'Pending'}"`,
+      p.personalityType || 'Pending',
     ];
   });
 
-  const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `PAW_Participants_${batchName.replace(/\s+/g, '_')}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadCSV([headers, ...rows], `PAW_Participants_${batchName.replace(/\s+/g, '_')}.csv`);
 };

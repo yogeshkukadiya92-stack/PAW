@@ -1,6 +1,6 @@
 # PAW (Personality Awareness Workshop) Operating System
 
-A modern, production-ready Operating System and CRM Dashboard designed for **Coach For Life's Personality Awareness Workshop (PAW)**, supporting both **Online** and **Offline** workshops.
+A React and Node.js Operating System and CRM Dashboard designed for **Coach For Life's Personality Awareness Workshop (PAW)**, supporting both **Online** and **Offline** workshops.
 
 Includes the official **40-Question Personality Profile Analysis** (Florence Littauer Model), strict **1:1 ICL member continuity**, Mission Calling Team CRM, and Graduation Certificates.
 
@@ -16,7 +16,7 @@ Includes the official **40-Question Personality Profile Analysis** (Florence Lit
 ### 2. Mission PAW Calling Team CRM
 - Hierarchy support: `PAW Head → Leader Head → Leader → Calling Member`.
 - Calling member capacities: **15**, **25**, or **35** calls.
-- **Bulk Lead Import**: Upload CSV or paste contacts (`Name, Phone, City`) with automatic capacity-based distribution.
+- **Bulk Lead Import**: Upload CSV or paste contacts (`Name, Phone, City`) with even distribution across available calling members.
 - **Call Dispositions & Logging**: `Pending`, `Interested`, `Callback`, `Registered`, `Not Reachable`.
 - 1-click **Register & Handover** to the Welcome Team.
 
@@ -67,13 +67,18 @@ Exact match with [Coach For Life PAW Personality Profile](https://workshop.coach
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Icons**: [Lucide React](https://lucide.dev/)
 - **Visuals**: [Canvas Confetti](https://www.npmjs.com/package/canvas-confetti)
-- **Persistence**: Browser `localStorage` with instant synchronization
+- **Backend**: Node.js 24+ with a persistent SQLite database.
+- **Authentication**: Individual accounts, hashed passwords, HttpOnly sessions, and server-side role permissions.
+- **Persistence**: Shared server data, background refresh and conflict-safe saving. Browser storage is used only for preferences and optional legacy imports.
 
 ---
 
 ## Getting Started
 
 ### Installation
+
+Use **Node.js 24 or newer**. `npm run dev` starts both the backend and frontend.
+
 ```bash
 # Clone the repository
 git clone https://github.com/yogeshkukadiya92-stack/PAW.git
@@ -88,13 +93,33 @@ npm run dev
 
 Open [http://localhost:5173/](http://localhost:5173/) in your browser.
 
+### Personal logins
+
+Open the local app, choose **Sign in**, and create your first **Main Admin (PAW Head)** account. No default username or password is installed.
+
+1. Create a batch and add team members with their actual roles.
+2. Open **Manage logins → Create login**, select a person, and give them a unique login ID and temporary password.
+3. Each person must replace their temporary password at first sign-in.
+4. Add participant records before creating their participant logins.
+
+The homepage follows **Basic details → 40 questions → Your report**, with English, Hindi, Gujarati and Marathi. Guest reports remain on the current device; authenticated participants save to their assigned profile. Main Admin dashboards include Test reports, Participants, Question bank and the existing Workshop operations.
+
+Calling members see their assigned leads; Welcome members see their assigned participants. Participants open their own assessment and report. Main Admins manage accounts and question wording. ICL Heads and Leaders oversee only records under their assigned hierarchy. Set the parent from **Reports to** when creating staff, or from the hierarchy cards.
+
+The app starts without demo records. The PAW Head can import existing browser records into the shared database from the account toolbar when legacy records are detected. Unchanged demo records remain excluded.
+
+See [LOGIN-SETUP.md](LOGIN-SETUP.md) for account setup, permissions, deployment and recovery details.
+
 ### Production Build
 ```bash
 npm run build
 npm run preview
+# Local built-app preview is served by the backend at http://localhost:3001
 ```
 
 ---
+
+For a hosted instance, use `npm start` behind HTTPS, set `PAW_APP_ORIGIN` and a private `PAW_SETUP_TOKEN`, and attach persistent storage for the database. The Docker image runs the Node server on port 3001.
 
 ## License
 MIT

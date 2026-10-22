@@ -122,3 +122,14 @@ dist
 # macOS
 .DS_Store
 *.pem
+
+# Private authentication database and backups
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Local design exports and reference investigation captures
+output/
+qa/reference-pawtest/
+qa/*.png

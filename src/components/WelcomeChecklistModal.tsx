@@ -1,3 +1,4 @@
+import { useDialog } from '@/lib/use-dialog';
 import React, { useState } from 'react';
 import { 
   X, 
@@ -21,13 +22,14 @@ interface WelcomeChecklistModalProps {
   onEscalateToLeader: (participantId: string, reason: string) => void;
 }
 
-export const WelcomeChecklistModal: React.FC<WelcomeChecklistModalProps> = ({
+const WelcomeChecklistModalContent: React.FC<WelcomeChecklistModalProps> = ({
   participant,
   isOpen,
   onClose,
   onSaveChecklist,
   onEscalateToLeader,
 }) => {
+  const dialogRef = useDialog(onClose);
   if (!isOpen || !participant) return null;
 
   const [checklist, setChecklist] = useState<WelcomeChecklist>({ ...participant.welcomeChecklist });
@@ -59,7 +61,7 @@ export const WelcomeChecklistModal: React.FC<WelcomeChecklistModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="WelcomeChecklist" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-xl bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-xl my-6">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -78,7 +80,7 @@ export const WelcomeChecklistModal: React.FC<WelcomeChecklistModalProps> = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            aria-label="Close dialog" onClick={onClose}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
           >
             <X className="w-5 h-5" />
@@ -309,4 +311,9 @@ export const WelcomeChecklistModal: React.FC<WelcomeChecklistModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const WelcomeChecklistModal: React.FC<WelcomeChecklistModalProps> = (props) => {
+  if (!props.isOpen || !props.participant) return null;
+  return <WelcomeChecklistModalContent {...props} />;
 };

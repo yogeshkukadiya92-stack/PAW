@@ -10,13 +10,14 @@ const STORAGE_KEYS = {
 };
 
 export const loadStoredBatches = (): PAWBatch[] => {
-  if (typeof window === 'undefined') return INITIAL_BATCHES;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEYS.BATCHES);
-    return data ? JSON.parse(data) : INITIAL_BATCHES;
+    const parsed = data ? JSON.parse(data) : [];
+    return Array.isArray(parsed) ? parsed.filter(record => !INITIAL_BATCHES.some(seed => JSON.stringify(seed) === JSON.stringify(record))) : [];
   } catch (e) {
     console.error('Failed to load batches from localStorage', e);
-    return INITIAL_BATCHES;
+    return [];
   }
 };
 
@@ -26,17 +27,19 @@ export const saveStoredBatches = (batches: PAWBatch[]) => {
     localStorage.setItem(STORAGE_KEYS.BATCHES, JSON.stringify(batches));
   } catch (e) {
     console.error('Failed to save batches to localStorage', e);
+    window.dispatchEvent(new Event('paw-storage-error'));
   }
 };
 
 export const loadStoredMembers = (): ICLMember[] => {
-  if (typeof window === 'undefined') return INITIAL_MEMBERS;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEYS.MEMBERS);
-    return data ? JSON.parse(data) : INITIAL_MEMBERS;
+    const parsed = data ? JSON.parse(data) : [];
+    return Array.isArray(parsed) ? parsed.filter(record => !INITIAL_MEMBERS.some(seed => JSON.stringify(seed) === JSON.stringify(record))) : [];
   } catch (e) {
     console.error('Failed to load members from localStorage', e);
-    return INITIAL_MEMBERS;
+    return [];
   }
 };
 
@@ -46,18 +49,20 @@ export const saveStoredMembers = (members: ICLMember[]) => {
     localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(members));
   } catch (e) {
     console.error('Failed to save members to localStorage', e);
+    window.dispatchEvent(new Event('paw-storage-error'));
   }
 };
 
 
 export const loadStoredLeads = (): CallingLead[] => {
-  if (typeof window === 'undefined') return INITIAL_CALLING_LEADS;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEYS.LEADS);
-    return data ? JSON.parse(data) : INITIAL_CALLING_LEADS;
+    const parsed = data ? JSON.parse(data) : [];
+    return Array.isArray(parsed) ? parsed.filter(record => !INITIAL_CALLING_LEADS.some(seed => JSON.stringify(seed) === JSON.stringify(record))) : [];
   } catch (e) {
     console.error('Failed to load leads from localStorage', e);
-    return INITIAL_CALLING_LEADS;
+    return [];
   }
 };
 
@@ -67,17 +72,19 @@ export const saveStoredLeads = (leads: CallingLead[]) => {
     localStorage.setItem(STORAGE_KEYS.LEADS, JSON.stringify(leads));
   } catch (e) {
     console.error('Failed to save leads to localStorage', e);
+    window.dispatchEvent(new Event('paw-storage-error'));
   }
 };
 
 export const loadStoredParticipants = (): Participant[] => {
-  if (typeof window === 'undefined') return INITIAL_PARTICIPANTS;
+  if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(STORAGE_KEYS.PARTICIPANTS);
-    return data ? JSON.parse(data) : INITIAL_PARTICIPANTS;
+    const parsed = data ? JSON.parse(data) : [];
+    return Array.isArray(parsed) ? parsed.filter(record => !INITIAL_PARTICIPANTS.some(seed => JSON.stringify(seed) === JSON.stringify(record))) : [];
   } catch (e) {
     console.error('Failed to load participants from localStorage', e);
-    return INITIAL_PARTICIPANTS;
+    return [];
   }
 };
 
@@ -87,13 +94,22 @@ export const saveStoredParticipants = (participants: Participant[]) => {
     localStorage.setItem(STORAGE_KEYS.PARTICIPANTS, JSON.stringify(participants));
   } catch (e) {
     console.error('Failed to save participants to localStorage', e);
+    window.dispatchEvent(new Event('paw-storage-error'));
   }
 };
 
-export const resetToInitialData = () => {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(STORAGE_KEYS.BATCHES);
-  localStorage.removeItem(STORAGE_KEYS.MEMBERS);
-  localStorage.removeItem(STORAGE_KEYS.LEADS);
-  localStorage.removeItem(STORAGE_KEYS.PARTICIPANTS);
+export const removeDemoData = () => {
+  const collections = [
+    [STORAGE_KEYS.BATCHES, INITIAL_BATCHES],
+    [STORAGE_KEYS.MEMBERS, INITIAL_MEMBERS],
+    [STORAGE_KEYS.LEADS, INITIAL_CALLING_LEADS],
+    [STORAGE_KEYS.PARTICIPANTS, INITIAL_PARTICIPANTS],
+  ] as const;
+  for (const [key, seeds] of collections) {
+    const stored = JSON.parse(localStorage.getItem(key) || '[]');
+    if (!Array.isArray(stored)) continue;
+    // Only remove unchanged seed records; retain records edited by the user.
+    const remaining = stored.filter(record => !seeds.some(seed => JSON.stringify(seed) === JSON.stringify(record)));
+    localStorage.setItem(key, JSON.stringify(remaining));
+  }
 };

@@ -1,3 +1,4 @@
+import { useDialog } from '@/lib/use-dialog';
 import React, { useState, useMemo } from 'react';
 import { 
   X, 
@@ -42,13 +43,14 @@ interface ParticipantAssessmentModalProps {
   onSaveAnswersProgress?: (participantId: string, answers: Record<number, string>) => void;
 }
 
-export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProps> = ({
+const ParticipantAssessmentModalContent: React.FC<ParticipantAssessmentModalProps> = ({
   participant,
   isOpen,
   onClose,
   onCompleteAssessment,
   onSaveAnswersProgress,
 }) => {
+  const dialogRef = useDialog(onClose);
   if (!isOpen || !participant) return null;
 
   // Step 1: Basic Details, Step 2: 40 Questions, Step 3: Profile Report
@@ -59,6 +61,7 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
   // View mode inside Step 2: 'card' (1 question at a time) or 'sheet' (all 40 questions list)
   const [viewMode, setViewMode] = useState<'card' | 'sheet'>('card');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [assessmentError, setAssessmentError] = useState('');
   const [copiedSummary, setCopiedSummary] = useState(false);
 
   // Answers store: map of questionNumber (1-40) -> chosen option value (string)
@@ -124,6 +127,7 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
       ...answers,
       [questionNumber]: optionValue,
     };
+    setAssessmentError('');
     setAnswers(nextAnswers);
     if (onSaveAnswersProgress) {
       onSaveAnswersProgress(participant.id, nextAnswers);
@@ -146,11 +150,14 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
 
   const finalizeAssessment = () => {
     if (totalAnswered < 40) {
-      const confirmIncomplete = window.confirm(
-        `You have answered ${totalAnswered} of 40 questions. Would you like to proceed and calculate the report based on answered traits?`
-      );
-      if (!confirmIncomplete) return;
+      setAssessmentError(`Answer all 40 questions before generating your report (${totalAnswered}/40 answered).`);
+      const missing = CFL_PAW_QUESTIONS.findIndex(q => !answers[q.questionNumber]);
+      setCurrentQuestionIndex(Math.max(0, missing));
+      setViewMode('card');
+      setStep(2);
+      return;
     }
+    setAssessmentError('');
 
     try {
       confetti({
@@ -194,24 +201,6 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
   };
 
 
-  const handleDemoPreFill = () => {
-    const demoAnswers: Record<number, string> = {};
-    // Generate a natural pattern with high Choleric / Sanguine
-    CFL_PAW_QUESTIONS.forEach((q, idx) => {
-      // Pick predominantly Choleric and Sanguine
-      let targetTemperament: TemperamentType = 'Choleric';
-      if (idx % 3 === 0) targetTemperament = 'Choleric';
-      else if (idx % 3 === 1) targetTemperament = 'Sanguine';
-      else if (idx % 5 === 0) targetTemperament = 'Melancholy';
-      else targetTemperament = 'Phlegmatic';
-
-      const matchedOption = q.options.find(o => o.temperament === targetTemperament) || q.options[0];
-      demoAnswers[q.questionNumber] = matchedOption.value;
-    });
-
-    setAnswers(demoAnswers);
-  };
-
   const handlePrint = () => {
     window.print();
   };
@@ -219,7 +208,7 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
   const currentQ = CFL_PAW_QUESTIONS[currentQuestionIndex];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="ParticipantAssessment" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-2xl shadow-2xl my-4 flex flex-col max-h-[92vh] overflow-hidden">
         {/* Top Sticky Header */}
         <div className="flex flex-wrap items-center justify-between px-6 py-4 border-b border-slate-200 bg-white z-10 gap-3">
@@ -247,7 +236,7 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
               Language: English
             </span>
             <button
-              onClick={onClose}
+              aria-label="Close dialog" onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
               title="Close Modal"
             >
@@ -293,13 +282,13 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
 
             <button
               onClick={() => {
-                if (totalAnswered > 0) setStep(3);
+                if (totalAnswered === 40) finalizeAssessment();
               }}
-              disabled={totalAnswered === 0}
+              disabled={totalAnswered < 40}
               className={`flex items-center space-x-2 transition ${
                 step === 3 
                   ? 'text-blue-700 font-bold' 
-                  : totalAnswered > 0 
+                  : totalAnswered === 40
                   ? 'text-slate-500 hover:text-slate-800 cursor-pointer' 
                   : 'text-slate-300 cursor-not-allowed'
               }`}
@@ -390,14 +379,7 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleDemoPreFill}
-                  className="w-full sm:w-auto px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition flex items-center justify-center gap-1.5"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Auto-Fill Demo Responses (Quick Review)</span>
-                </button>
+
 
                 <button
                   type="button"
@@ -464,17 +446,11 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
                     </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleDemoPreFill}
-                    className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition"
-                    title="Auto-fill for demonstration"
-                  >
-                    Demo Fill
-                  </button>
+
                 </div>
               </div>
 
+              {assessmentError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{assessmentError}</p>}
               {/* Visual Global Progress Bar */}
               <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                 <div
@@ -564,10 +540,12 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
                       const isSelected = answers[currentQ.questionNumber] === option.value;
 
                       return (
-                        <div
+                        <button
+                          type="button"
+                          aria-pressed={isSelected}
                           key={option.value}
                           onClick={() => handleSelectOption(currentQ.questionNumber, option.value)}
-                          className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between select-none ${
+                          className={`text-left p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between select-none ${
                             isSelected
                               ? 'bg-blue-50/80 border-blue-500 text-blue-950 shadow-xs ring-1 ring-blue-500'
                               : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50/80'
@@ -590,7 +568,7 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
                               ({option.description})
                             </p>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -1024,4 +1002,9 @@ export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProp
       </div>
     </div>
   );
+};
+
+export const ParticipantAssessmentModal: React.FC<ParticipantAssessmentModalProps> = (props) => {
+  if (!props.isOpen || !props.participant) return null;
+  return <ParticipantAssessmentModalContent {...props} />;
 };

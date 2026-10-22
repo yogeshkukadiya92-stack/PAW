@@ -99,7 +99,7 @@ export const WelcomeFollowupView: React.FC<WelcomeFollowupViewProps> = ({
       <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-bold text-slate-900">
                 Welcome & Follow-up ICL Team (Unified Team)
               </h2>
@@ -114,7 +114,7 @@ export const WelcomeFollowupView: React.FC<WelcomeFollowupViewProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => exportParticipantsToCSV(participants, welcomeMembers, batch.name)}
+              onClick={() => exportParticipantsToCSV(filteredParticipants, welcomeMembers, batch.name)}
               className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 flex items-center gap-1.5 transition"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" />
@@ -175,7 +175,7 @@ export const WelcomeFollowupView: React.FC<WelcomeFollowupViewProps> = ({
           </div>
 
           {/* Search & Member Filter */}
-          <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <div className="relative flex-1 sm:w-48">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
@@ -227,13 +227,13 @@ export const WelcomeFollowupView: React.FC<WelcomeFollowupViewProps> = ({
               >
                 <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
                   {/* Left: Participant Info */}
-                  <div className="flex items-start space-x-3">
-                    <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 text-xs">
+                  <div className="flex min-w-0 items-start space-x-3">
+                    <div className="shrink-0 w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 text-xs">
                       {p.fullName.charAt(0)}
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <h4 className="text-sm font-bold text-slate-900">{p.fullName}</h4>
+                        <h4 className="break-words text-sm font-bold text-slate-900">{p.fullName}</h4>
                         <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700">
                           {p.loginId}
                         </span>

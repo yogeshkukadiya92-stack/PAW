@@ -1,3 +1,4 @@
+import { useDialog } from '@/lib/use-dialog';
 import React, { useState } from 'react';
 import { X, Upload, Users, Check, AlertCircle, FileSpreadsheet } from 'lucide-react';
 import { ICLMember, CallingLead } from '@/types/paw';
@@ -10,30 +11,20 @@ interface ImportLeadsModalProps {
   onImportLeads: (leads: Omit<CallingLead, 'id' | 'callLogs'>[]) => void;
 }
 
-export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = ({
+const ImportLeadsModalContent: React.FC<ImportLeadsModalProps> = ({
   isOpen,
   onClose,
   callingMembers,
   batchId,
   onImportLeads,
 }) => {
+  const dialogRef = useDialog(onClose);
   if (!isOpen) return null;
 
   const [rawText, setRawText] = useState('');
   const [allocationMode, setAllocationMode] = useState<'AUTO' | 'SPECIFIC'>('AUTO');
   const [selectedMemberId, setSelectedMemberId] = useState<string>(callingMembers[0]?.id || '');
   const [error, setError] = useState<string | null>(null);
-
-  const sampleTemplate = `Rajesh Patel, 9825012345, Ahmedabad
-Meera Shah, 9879023456, Surat
-Vikram Desai, 9426034567, Vadodara
-Anjali Mehta, 9909045678, Rajkot
-Karan Joshi, 9824056789, Bhavnagar`;
-
-  const handlePasteSample = () => {
-    setRawText(sampleTemplate);
-    setError(null);
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,6 +47,10 @@ Karan Joshi, 9824056789, Bhavnagar`;
       return;
     }
 
+    if (allocationMode === 'SPECIFIC' && !callingMembers.some(m => m.id === selectedMemberId && m.isAvailable)) {
+      setError('Select an available calling member before importing.');
+      return;
+    }
     const lines = rawText.split('\n').filter(line => line.trim().length > 0);
     const parsedLeads: { fullName: string; phone: string; city: string }[] = [];
 
@@ -92,7 +87,7 @@ Karan Joshi, 9824056789, Bhavnagar`;
         });
       });
     } else {
-      // Auto-Distribute by Capacity (15, 25, 35)
+      // Distribute evenly (15, 25, 35)
       const membersPool = callingMembers.filter(m => m.isAvailable);
       if (membersPool.length === 0) {
         setError('No available calling members found to distribute leads.');
@@ -117,7 +112,7 @@ Karan Joshi, 9824056789, Bhavnagar`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="ImportLeads" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-xl p-6 space-y-5 my-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -130,12 +125,12 @@ Karan Joshi, 9824056789, Bhavnagar`;
                 Bulk Import Mission Calling Leads
               </h3>
               <p className="text-[11px] text-slate-500">
-                Import contacts and automatically distribute by member capacity (15 / 25 / 35)
+                Import contacts and distribute evenly across available calling members
               </p>
             </div>
           </div>
           <button
-            onClick={onClose}
+            aria-label="Close dialog" onClick={onClose}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
           >
             <X className="w-4 h-4" />
@@ -170,9 +165,9 @@ Karan Joshi, 9824056789, Bhavnagar`;
                 className="mt-0.5 text-blue-600 focus:ring-blue-500"
               />
               <div>
-                <strong className="block text-slate-900 text-xs">Auto-Distribute by Capacity</strong>
+                <strong className="block text-slate-900 text-xs">Distribute evenly</strong>
                 <span className="text-[11px] text-slate-500">
-                  Balances leads across active calling members (15 / 25 / 35 limits)
+                  Shares leads evenly across available calling members
                 </span>
               </div>
             </label>
@@ -226,13 +221,6 @@ Karan Joshi, 9824056789, Bhavnagar`;
               Paste Contacts (Format: Full Name, Phone, City):
             </label>
             <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={handlePasteSample}
-                className="text-[11px] text-blue-600 hover:underline"
-              >
-                Insert 5 Sample Leads
-              </button>
               <label className="cursor-pointer text-[11px] text-slate-600 hover:text-slate-900 underline flex items-center gap-1">
                 <Upload className="w-3 h-3" />
                 <span>Upload CSV</span>
@@ -277,4 +265,9 @@ Karan Joshi, 9824056789, Bhavnagar`;
       </div>
     </div>
   );
+};
+
+export const ImportLeadsModal: React.FC<ImportLeadsModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <ImportLeadsModalContent {...props} />;
 };

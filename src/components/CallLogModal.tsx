@@ -1,3 +1,4 @@
+import { useDialog } from '@/lib/use-dialog';
 import React, { useState } from 'react';
 import { X, PhoneCall, Clock, CheckCircle2, MessageSquare, PhoneOff, Calendar } from 'lucide-react';
 import { CallingLead, CallStatus } from '@/types/paw';
@@ -10,13 +11,14 @@ interface CallLogModalProps {
   onRegisterAndHandover: (lead: CallingLead) => void;
 }
 
-export const CallLogModal: React.FC<CallLogModalProps> = ({
+const CallLogModalContent: React.FC<CallLogModalProps> = ({
   lead,
   isOpen,
   onClose,
   onSaveLog,
   onRegisterAndHandover,
 }) => {
+  const dialogRef = useDialog(onClose);
   if (!isOpen || !lead) return null;
 
   const [status, setStatus] = useState<CallStatus>(lead.callStatus);
@@ -34,7 +36,7 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="CallLog" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
       <div className="relative w-full max-w-lg bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-xl">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
@@ -44,7 +46,7 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({
             <p className="text-xs text-slate-500">{lead.phone} • {lead.city}</p>
           </div>
           <button
-            onClick={onClose}
+            aria-label="Close dialog" onClick={onClose}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
           >
             <X className="w-5 h-5" />
@@ -206,4 +208,9 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const CallLogModal: React.FC<CallLogModalProps> = (props) => {
+  if (!props.isOpen || !props.lead) return null;
+  return <CallLogModalContent {...props} />;
 };

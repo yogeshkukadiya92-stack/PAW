@@ -1,3 +1,4 @@
+import { useDialog } from '@/lib/use-dialog';
 import React from 'react';
 import { X, Award, Printer } from 'lucide-react';
 import { Participant, PAWBatch } from '@/types/paw';
@@ -10,12 +11,13 @@ interface CertificateModalProps {
   onClose: () => void;
 }
 
-export const CertificateModal: React.FC<CertificateModalProps> = ({
+const CertificateModalContent: React.FC<CertificateModalProps> = ({
   participant,
   batch,
   isOpen,
   onClose,
 }) => {
+  const dialogRef = useDialog(onClose);
   if (!isOpen || !participant) return null;
 
   const handlePrint = () => {
@@ -23,7 +25,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Certificate" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xl my-6">
         {/* Controls */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 print:hidden">
@@ -42,7 +44,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
               <span>Print / Save PDF</span>
             </button>
             <button
-              onClick={onClose}
+              aria-label="Close dialog" onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
             >
               <X className="w-5 h-5" />
@@ -105,4 +107,9 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const CertificateModal: React.FC<CertificateModalProps> = props => {
+  if (!props.isOpen || !props.participant) return null;
+  return <CertificateModalContent {...props} />;
 };

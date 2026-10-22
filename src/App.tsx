@@ -9,18 +9,12 @@ import {
   CallStatus, 
   WelcomeChecklist 
 } from '@/types/paw';
-import { INITIAL_BATCHES } from '@/lib/mock-data';
-import { 
-  loadStoredBatches, 
-  saveStoredBatches, 
-  loadStoredMembers,
-  saveStoredMembers,
-  loadStoredLeads, 
-  saveStoredLeads, 
-  loadStoredParticipants, 
-  saveStoredParticipants,
-  resetToInitialData 
-} from '@/lib/storage';
+import { loadStoredBatches, loadStoredMembers, loadStoredLeads, loadStoredParticipants } from '@/lib/storage';
+import { type LoginUser, type Snapshot, type WorkspaceData, canManage } from '@/lib/api';
+import { useWorkspace } from '@/lib/use-workspace';
+import { AccountToolbar } from '@/components/AccountToolbar';
+import { AccountsModal } from '@/components/AccountsModal';
+import { ParticipantDashboard } from '@/components/ParticipantDashboard';
 
 import { Header } from '@/components/Header';
 import { NewBatchModal } from '@/components/NewBatchModal';
@@ -28,25 +22,54 @@ import { MissionCallingView } from '@/components/MissionCallingView';
 import { CallLogModal } from '@/components/CallLogModal';
 import { WelcomeFollowupView } from '@/components/WelcomeFollowupView';
 import { WelcomeChecklistModal } from '@/components/WelcomeChecklistModal';
-import { ParticipantAssessmentModal } from '@/components/ParticipantAssessmentModal';
+import { AssessmentExperience, AssessmentExperienceModal } from '@/components/AssessmentExperience';
+import { AssessmentDashboard, type DashboardTab } from '@/components/AssessmentDashboard';
+import { ProfileHeader } from '@/components/ProfileHeader';
+import { participantReports, type AssessmentReport } from '@/lib/assessment';
+import type { AssessmentLanguage } from '@/lib/assessment-i18n';
+import { roleLabels } from '@/lib/api';
 import { EscalationDrawer } from '@/components/EscalationDrawer';
 import { CertificateModal } from '@/components/CertificateModal';
 import { ManageTeamModal } from '@/components/ManageTeamModal';
 import { ParticipantLivePortal } from '@/components/ParticipantLivePortal';
 
-export default function App() {
-  // Main Data States with localStorage persistence
-  const [batches, setBatches] = useState<PAWBatch[]>(() => loadStoredBatches());
-  const [selectedBatch, setSelectedBatch] = useState<PAWBatch>(() => {
-    const loaded = loadStoredBatches();
-    return loaded[0] || INITIAL_BATCHES[0];
+interface AppProps { user: LoginUser; initialState: Snapshot; onLogout: () => Promise<void>; onUserChange: (user: LoginUser) => void; }
+export default function App({ user, initialState, onLogout, onUserChange }: AppProps) {
+  const { data, setData, saveStatus, saveError, retry, reload } = useWorkspace(initialState);
+  const { batches, members, leads, participants } = data;
+  const updateCollection = <K extends keyof WorkspaceData>(key: K, update: React.SetStateAction<WorkspaceData[K]>) => {
+    setData(prev => ({...prev, [key]: typeof update === 'function' ? (update as (value: WorkspaceData[K]) => WorkspaceData[K])(prev[key]) : update}));
+  };
+  const setBatches = (value: React.SetStateAction<PAWBatch[]>) => updateCollection('batches', value);
+  const setMembers = (value: React.SetStateAction<ICLMember[]>) => updateCollection('members', value);
+  const setLeads = (value: React.SetStateAction<CallingLead[]>) => updateCollection('leads', value);
+  const setParticipants = (value: React.SetStateAction<Participant[]>) => updateCollection('participants', value);
+  const [selectedBatchId, setSelectedBatchId] = useState(() => {
+    try { return localStorage.getItem(`paw_selected_batch_${user.id}`) || ''; } catch { return ''; }
   });
-  const [members, setMembers] = useState<ICLMember[]>(() => loadStoredMembers());
-  const [leads, setLeads] = useState<CallingLead[]>(() => loadStoredLeads());
-  const [participants, setParticipants] = useState<Participant[]>(() => loadStoredParticipants());
-
-  // Active View / Role Simulator
-  const [currentRole, setCurrentRole] = useState<UserRole | 'PARTICIPANT_VIEW'>('PAW_HEAD');
+  const assignedBatchIds = new Set([...leads, ...participants].map(record => record.pawBatchId));
+  const selectedBatch = batches.find(b => b.id === selectedBatchId)
+    || (user.role !== 'PAW_HEAD' ? batches.find(b => assignedBatchIds.has(b.id)) : undefined)
+    || batches[0];
+  const setSelectedBatch = (batch: PAWBatch) => setSelectedBatchId(batch.id);
+  const [currentRole, setCurrentRole] = useState<UserRole | 'PARTICIPANT_VIEW'>(user.role === 'PARTICIPANT' ? 'PARTICIPANT_VIEW' : canManage(user) ? 'PAW_HEAD' : user.role);
+  const [dashboardTab,setDashboardTab]=useState<DashboardTab>('reports');
+  const [profileLanguage,setProfileLanguage]=useState<AssessmentLanguage>('en');
+  const [isAccountsOpen, setIsAccountsOpen] = useState(false);
+  const [legacyData] = useState<WorkspaceData | null>(() => user.role === 'PAW_HEAD' ? {batches:loadStoredBatches(), members:loadStoredMembers(), leads:loadStoredLeads(), participants:loadStoredParticipants()} : null);
+  const hasLegacy = legacyData && (['batches','members','leads','participants'] as const).some(key => legacyData[key].some(row => !data[key].some(current => current.id === row.id)));
+  const importLegacy = () => {
+    if (!legacyData) return;
+    setData(prev => {
+      const merged = {...prev};
+      for (const key of ['batches','members','leads','participants'] as const) {
+        (merged[key] as unknown[]) = [...prev[key], ...legacyData[key].filter(row => !prev[key].some(item => item.id === row.id))];
+      }
+      merged.participants = merged.participants.map(p => ['Submitted','Report_Generated'].includes(p.firstAssignmentStatus) && Object.keys(p.assessmentAnswers || {}).length < 40 ? {...p,firstAssignmentStatus:'In_Progress'} : p);
+      return merged;
+    });
+    showToast('Importing your saved browser records into the shared workspace.');
+  };
 
   // Modal States
   const [isNewBatchOpen, setIsNewBatchOpen] = useState(false);
@@ -68,33 +91,28 @@ export default function App() {
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+
   };
 
-  // Persistence Effects
   useEffect(() => {
-    saveStoredBatches(batches);
-  }, [batches]);
+    if (!toastMessage) return;
+    const timer = setTimeout(() => setToastMessage(null), 3500);
+    return () => clearTimeout(timer);
+  }, [toastMessage]);
 
   useEffect(() => {
-    saveStoredMembers(members);
-  }, [members]);
-
-  useEffect(() => {
-    saveStoredLeads(leads);
-  }, [leads]);
-
-  useEffect(() => {
-    saveStoredParticipants(participants);
-  }, [participants]);
+    if (selectedBatch) {
+      try { localStorage.setItem(`paw_selected_batch_${user.id}`, selectedBatch.id); } catch {}
+    }
+  }, [selectedBatch?.id, user.id]);
 
   // Filter Members by Teams
   const callingMembers = members.filter((m) => m.team === 'CALLING');
   const welcomeMembers = members.filter((m) => m.team === 'WELCOME_FOLLOWUP');
 
   // Stats calculation
-  const batchLeads = leads.filter((l) => l.pawBatchId === selectedBatch.id);
-  const batchParticipants = participants.filter((p) => p.pawBatchId === selectedBatch.id);
+  const batchLeads = leads.filter((l) => l.pawBatchId === selectedBatch?.id);
+  const batchParticipants = participants.filter((p) => p.pawBatchId === selectedBatch?.id);
   const registeredCount = batchParticipants.length;
   const welcomeCompletedCount = batchParticipants.filter((p) => p.welcomeCallStatus === 'Completed').length;
   const assignmentsDoneCount = batchParticipants.filter(
@@ -114,9 +132,10 @@ export default function App() {
 
   // 2. Add New Lead Handler
   const handleAddNewLead = (fullName: string, phone: string, city: string, memberId: string) => {
+    if (!selectedBatch) return;
     const newLead: CallingLead = {
-      id: `lead-${Date.now().toString().slice(-4)}`,
-      pawBatchId: selectedBatch.id,
+      id: `lead-${crypto.randomUUID()}`,
+      pawBatchId: selectedBatch?.id,
       fullName,
       phone,
       city,
@@ -142,6 +161,10 @@ export default function App() {
 
   // 2c. Direct Add Participant Handler (Welcome View)
   const handleAddParticipant = (newParticipant: Participant) => {
+    if (participants.some(p => p.pawBatchId === newParticipant.pawBatchId && p.phone === newParticipant.phone)) {
+      showToast('This phone number is already registered in this batch.');
+      return;
+    }
     setParticipants((prev) => [newParticipant, ...prev]);
     showToast(`Directly registered ${newParticipant.fullName} (ID: ${newParticipant.loginId})!`);
   };
@@ -167,7 +190,7 @@ export default function App() {
             ...lead,
             callStatus: status,
             callLogs: [newLog, ...(lead.callLogs || [])],
-            nextFollowupDate: callbackDate || lead.nextFollowupDate,
+            nextFollowupDate: status === 'CALLBACK_REQUESTED' ? callbackDate : undefined,
             lastCalledAt: new Date().toISOString(),
           };
         }
@@ -179,8 +202,18 @@ export default function App() {
 
   // 4. Mission Calling -> Registration & Handover to Welcome Team
   const handleRegisterAndHandover = (lead: CallingLead) => {
+    if (!selectedBatch || lead.callStatus === 'REGISTERED') return;
+    if (!welcomeMembers.some(m => m.isAvailable)) {
+      showToast('Add an available Welcome team member before registering a lead.');
+      if (user.role === 'PAW_HEAD') setIsManageTeamOpen(true);
+      return;
+    }
+    if (participants.some(p => p.pawBatchId === lead.pawBatchId && p.phone === lead.phone)) {
+      showToast('This phone number is already registered in this batch.');
+      return;
+    }
     try {
-      confetti({
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) confetti({
         particleCount: 70,
         spread: 60,
         origin: { y: 0.6 },
@@ -193,7 +226,7 @@ export default function App() {
       prev.map((l) => (l.id === lead.id ? { ...l, callStatus: 'REGISTERED' as CallStatus } : l))
     );
 
-    const sortedWelcomeMembers = [...welcomeMembers].sort((a, b) => {
+    const sortedWelcomeMembers = welcomeMembers.filter(m => m.isAvailable).sort((a, b) => {
       const countA = participants.filter((p) => p.assignedWelcomeIclMemberId === a.id).length;
       const countB = participants.filter((p) => p.assignedWelcomeIclMemberId === b.id).length;
       return countA - countB;
@@ -202,9 +235,9 @@ export default function App() {
 
     const nextIdNum = String(participants.length + 1).padStart(3, '0');
     const newParticipant: Participant = {
-      id: `part-${Date.now()}`,
-      loginId: `${selectedBatch.code || 'PAW'}-${nextIdNum}`,
-      pawBatchId: selectedBatch.id,
+      id: `part-${crypto.randomUUID()}`,
+      loginId: `${selectedBatch.code || 'PAW'}-${crypto.randomUUID().slice(0,8).toUpperCase()}`,
+      pawBatchId: selectedBatch?.id,
       fullName: lead.fullName,
       phone: lead.phone,
       whatsappNumber: lead.phone,
@@ -326,6 +359,11 @@ export default function App() {
     showToast(`Personality Report saved to participant profile!`);
   };
 
+  const handleProfileComplete=(participantId:string, report:AssessmentReport)=>{
+    setParticipants(previous=>previous.map(p=>p.id===participantId?{...p,assessmentAnswers:report.answers,preferredLanguage:report.language,firstAssignmentStatus:'Report_Generated',personalityType:`${report.dominant} - ${report.secondary}`,temperamentScores:report.scores,dominantTemperament:report.dominant,secondaryTemperament:report.secondary,assessmentReports:[report,...(p.assessmentReports||[])]}:p));
+    showToast('Personality report saved to your profile.');
+  };
+
   // 8b. Real-time answers progress save
   const handleSaveAnswersProgress = (participantId: string, answers: Record<number, string>) => {
     setParticipants((prev) =>
@@ -400,27 +438,51 @@ export default function App() {
   };
 
   const handleDeleteMember = (memberId: string) => {
+    if (leads.some(l => l.assignedMemberId === memberId) || participants.some(p => p.assignedWelcomeIclMemberId === memberId || p.assignedCallingMemberId === memberId) || batches.some(b => b.pawHeadId === memberId)) {
+      showToast('This member owns records. Mark them unavailable instead of removing them.');
+      return;
+    }
     setMembers((prev) => prev.filter((m) => m.id !== memberId));
     showToast('Member removed from team roster.');
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
+  const toolbar = <AccountToolbar user={user} onAccounts={() => setIsAccountsOpen(true)} onLogout={() => {
+    if (saveStatus !== 'saved') { showToast('Wait for your changes to save before signing out.'); return; }
+    void onLogout().catch(error => showToast(error.message));
+  }} saveStatus={saveStatus} onImport={hasLegacy ? importLegacy : undefined} />;
+  const accountsModal = <AccountsModal isOpen={isAccountsOpen} onClose={() => setIsAccountsOpen(false)} user={user} data={data} onUserChange={onUserChange} />;
+  const feedback = <>
+    {toastMessage && <div role="status" className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-5 z-[60] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-sm">{toastMessage}</div>}
+    {saveError && <div role="alert" className="bg-rose-50 border-b border-rose-200 px-4 py-3 text-sm text-rose-800 flex flex-wrap items-center justify-center gap-3"><span>{saveError}</span><button className="underline font-semibold" onClick={() => void retry()}>Retry saving</button><button className="underline font-semibold" onClick={() => {
+      if (window.confirm('Reload the shared records? Your unsaved changes will be discarded.')) void reload().catch(error => showToast(error.message));
+    }}>Reload latest records</button></div>}
+  </>;
 
+  if (user.role === 'PARTICIPANT') {
+    const participant = participants.find(p => p.id === user.participantId);
+    return <div className="profile-app">{toolbar}{feedback}{accountsModal}{participant
+      ? <AssessmentExperience participant={participant} onSaveProgress={handleSaveAnswersProgress} onComplete={handleProfileComplete}/>
+      : <main className="profile-container"><div className="profile-panel"><h1>Your assessment profile is pending</h1><p className="profile-muted">Ask your PAW Head to link your participant record to this login. Your personal assessment will appear here once it is linked.</p></div></main>}</div>;
+  }
+
+  return (
+    <div className="profile-app profile-dashboard-shell flex flex-col">
+      <ProfileHeader language={profileLanguage} onLanguage={setProfileLanguage} onHome={()=>setDashboardTab('reports')}/>{toolbar}{feedback}{accountsModal}
+
+      {/* Main Content Area */}
+      <main className="profile-container w-full flex-1">
+        <div className="profile-dashboard-heading"><h1>{roleLabels[user.role]} dashboard</h1><p className="profile-muted">Review assessment reports according to your assigned position.</p></div>
+        <nav className="profile-dashboard-tabs no-print" aria-label="Dashboard sections" role="tablist">{([['reports','Test reports'],['participants','Participants'],...(user.role==='PAW_HEAD'?[['questions','Question bank']]:[]),['operations','Workshop operations']] as [DashboardTab,string][]).map(([key,label])=><button role="tab" key={key} aria-selected={dashboardTab===key} onClick={()=>setDashboardTab(key)}>{label}{key==='reports'&&<small>{participants.reduce((total,p)=>total+participantReports(p).length,0)}</small>}{key==='participants'&&<small>{participants.length}</small>}</button>)}</nav>
       {/* Header */}
-      <Header
+      {dashboardTab==='operations' && selectedBatch && <Header
+        allowNavigation={canManage(user)}
+        canCreateBatch={user.role === 'PAW_HEAD'}
+        canUseEscalations={canManage(user) || user.role === 'WELCOME_MEMBER'}
         batches={batches}
         selectedBatch={selectedBatch}
         onSelectBatch={setSelectedBatch}
         onOpenNewBatchModal={() => setIsNewBatchOpen(true)}
-        onOpenManageTeamModal={() => setIsManageTeamOpen(true)}
+        onOpenManageTeamModal={user.role === 'PAW_HEAD' ? () => setIsManageTeamOpen(true) : undefined}
         currentRole={currentRole}
         onRoleChange={setCurrentRole}
         stats={{
@@ -431,13 +493,12 @@ export default function App() {
           escalationsCount: escalatedParticipants.length,
         }}
         onOpenEscalations={() => setIsEscalationsOpen(true)}
-      />
+      />}
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+        {dashboardTab!=='operations'?<AssessmentDashboard user={user} members={members} participants={participants} tab={dashboardTab} onAssessment={p=>{setSelectedParticipantForAssessment(p);setIsAssessmentOpen(true);}} onChangeMember={(id,parentId)=>setMembers(previous=>previous.map(m=>m.id===id?{...m,parentLeaderId:parentId||undefined}:m))} onAssignParticipant={(id,memberId)=>setParticipants(previous=>previous.map(p=>p.id===id?{...p,assignedWelcomeIclMemberId:memberId}:p))}/>:!selectedBatch?<section className="profile-panel profile-workshop-empty"><h2>{user.role==='PAW_HEAD'?'Create your first workshop':'No workshop assigned yet'}</h2><p className="profile-muted">Reports and the question bank are ready. Add a workshop to manage calling, registrations and follow-ups.</p>{user.role==='PAW_HEAD'?<div className="flex flex-wrap gap-3 mt-5"><button className="profile-button primary" onClick={()=>setIsNewBatchOpen(true)}>Create workshop</button><button className="profile-button" onClick={()=>setIsManageTeamOpen(true)}>Manage team</button></div>:<p className="profile-muted mt-4">Ask your PAW Head to assign your workshop and records.</p>}</section>:<>
         {/* View Switcher based on currentRole */}
         {currentRole === 'PARTICIPANT_VIEW' ? (
-          <ParticipantLivePortal
+          <ParticipantLivePortal key={selectedBatch.id}
             participants={batchParticipants}
             onOpenAssessment={(p) => {
               setSelectedParticipantForAssessment(p);
@@ -453,7 +514,7 @@ export default function App() {
             {/* Mission Calling View (Active for PAW_HEAD and CALLING_MEMBER) */}
             {(currentRole === 'PAW_HEAD' || currentRole === 'CALLING_MEMBER' || currentRole === 'LEADER') && (
               <section>
-                <MissionCallingView
+                <MissionCallingView key={selectedBatch.id}
                   batch={selectedBatch}
                   callingMembers={callingMembers}
                   leads={batchLeads}
@@ -471,7 +532,7 @@ export default function App() {
             {/* Welcome & Follow-up View (Active for PAW_HEAD and WELCOME_MEMBER) */}
             {(currentRole === 'PAW_HEAD' || currentRole === 'WELCOME_MEMBER') && (
               <section className="pt-4">
-                <WelcomeFollowupView
+                <WelcomeFollowupView key={selectedBatch.id}
                   batch={selectedBatch}
                   welcomeMembers={welcomeMembers}
                   participants={batchParticipants}
@@ -495,42 +556,33 @@ export default function App() {
             )}
           </>
         )}
+        </>}
       </main>
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-3.5 px-4 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between max-w-7xl mx-auto w-full gap-2">
         <span>PAW Operating System • Coach For Life Live Platform</span>
-        <button
-          onClick={() => {
-            if (confirm('Are you sure you want to reset demo data back to initial defaults?')) {
-              resetToInitialData();
-              window.location.reload();
-            }
-          }}
-          className="text-slate-500 hover:text-slate-800 underline transition"
-        >
-          Reset Demo Data
-        </button>
+
       </footer>
 
       {/* MODALS */}
       {/* 1. New PAW Batch Modal */}
-      <NewBatchModal
+      {user.role === 'PAW_HEAD' && <NewBatchModal
         isOpen={isNewBatchOpen}
         onClose={() => setIsNewBatchOpen(false)}
         availableMembers={members}
         onBatchCreated={handleBatchCreated}
-      />
+      />}
 
       {/* 2. Manage ICL Team Modal */}
-      <ManageTeamModal
+      {user.role === 'PAW_HEAD' && <ManageTeamModal
         isOpen={isManageTeamOpen}
         onClose={() => setIsManageTeamOpen(false)}
         members={members}
         onAddMember={handleAddMember}
         onToggleAvailability={handleToggleMemberAvailability}
         onDeleteMember={handleDeleteMember}
-      />
+      />}
 
       {/* 3. Call Log Modal */}
       <CallLogModal
@@ -557,16 +609,7 @@ export default function App() {
       />
 
       {/* 5. Participant 40-Q Assessment Modal */}
-      <ParticipantAssessmentModal
-        participant={selectedParticipantForAssessment}
-        isOpen={isAssessmentOpen}
-        onClose={() => {
-          setIsAssessmentOpen(false);
-          setSelectedParticipantForAssessment(null);
-        }}
-        onCompleteAssessment={handleCompleteAssessment}
-        onSaveAnswersProgress={handleSaveAnswersProgress}
-      />
+      <AssessmentExperienceModal participant={selectedParticipantForAssessment||undefined} isOpen={isAssessmentOpen} onClose={()=>{setIsAssessmentOpen(false);setSelectedParticipantForAssessment(null);}} onSaveProgress={handleSaveAnswersProgress} onComplete={handleProfileComplete}/>
 
       {/* 6. Leader Escalations Drawer */}
       <EscalationDrawer

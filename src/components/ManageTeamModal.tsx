@@ -1,3 +1,4 @@
+import { useDialog } from '@/lib/use-dialog';
 import React, { useState } from 'react';
 import { X, Users, UserPlus, Trash2, CheckCircle2, Shield } from 'lucide-react';
 import { ICLMember, UserRole, CallingCapacity } from '@/types/paw';
@@ -11,7 +12,7 @@ interface ManageTeamModalProps {
   onDeleteMember: (memberId: string) => void;
 }
 
-export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
+const ManageTeamModalContent: React.FC<ManageTeamModalProps> = ({
   isOpen,
   onClose,
   members,
@@ -19,6 +20,7 @@ export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
   onToggleAvailability,
   onDeleteMember,
 }) => {
+  const dialogRef = useDialog(onClose);
   if (!isOpen) return null;
 
   const [activeTab, setActiveTab] = useState<'CALLING' | 'WELCOME_FOLLOWUP'>('CALLING');
@@ -29,6 +31,7 @@ export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('CALLING_MEMBER');
+  const [parentLeaderId,setParentLeaderId]=useState('');
   const [capacity, setCapacity] = useState<CallingCapacity>(25);
 
   const handleAddSubmit = (e: React.FormEvent) => {
@@ -36,14 +39,15 @@ export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
     if (!name.trim()) return;
 
     const newMember: ICLMember = {
-      id: `m-${Date.now()}`,
+      id: `m-${crypto.randomUUID()}`,
       name: name.trim(),
-      phone: phone.trim() || '9898012345',
-      email: email.trim() || `${name.toLowerCase().replace(/\s+/g, '')}@cfl.in`,
+      phone: phone.trim(),
+      email: email.trim(),
       role,
-      team: role === 'CALLING_MEMBER' ? 'CALLING' : 'WELCOME_FOLLOWUP',
+      team: role === 'CALLING_MEMBER' ? 'CALLING' : role === 'WELCOME_MEMBER' ? 'WELCOME_FOLLOWUP' : 'LEADERSHIP',
       callingCapacity: role === 'CALLING_MEMBER' ? capacity : undefined,
       isAvailable: true,
+      parentLeaderId:parentLeaderId||undefined,
     };
 
     onAddMember(newMember);
@@ -55,11 +59,11 @@ export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
 
   const filteredMembers = members.filter((m) => {
     if (activeTab === 'CALLING') return m.team === 'CALLING';
-    return m.team === 'WELCOME_FOLLOWUP';
+    return m.team === 'WELCOME_FOLLOWUP' || m.team === 'LEADERSHIP';
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="ManageTeam" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-xl p-6 space-y-5 my-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -77,7 +81,7 @@ export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            aria-label="Close dialog" onClick={onClose}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
           >
             <X className="w-4 h-4" />
@@ -153,9 +157,10 @@ export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
                 <label className="font-semibold text-slate-700 block mb-1">Assigned Role:</label>
                 <select
                   value={role}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
+                  onChange={(e) => {setRole(e.target.value as UserRole);setParentLeaderId('');}}
                   className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
                 >
+                  <option value="PAW_HEAD">PAW Head</option>
                   <option value="CALLING_MEMBER">Calling Member (Mission Calling)</option>
                   <option value="WELCOME_MEMBER">Welcome & Follow-up Member</option>
                   <option value="LEADER">Team Leader</option>
@@ -163,6 +168,7 @@ export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
                 </select>
               </div>
 
+              {role!=='PAW_HEAD'&&<div><label className="font-semibold text-slate-700 block mb-1" htmlFor="team-parent">Reports to</label><select id="team-parent" className="auth-input" value={parentLeaderId} onChange={e=>setParentLeaderId(e.target.value)}><option value="">Assign hierarchy later</option>{members.filter(m=>m.role===(role==='LEADER_HEAD'?'PAW_HEAD':role==='LEADER'?'LEADER_HEAD':'LEADER')).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></div>}
               {role === 'CALLING_MEMBER' && (
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">Calling Capacity:</label>
@@ -278,4 +284,9 @@ export const ManageTeamModal: React.FC<ManageTeamModalProps> = ({
       </div>
     </div>
   );
+};
+
+export const ManageTeamModal: React.FC<ManageTeamModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <ManageTeamModalContent {...props} />;
 };

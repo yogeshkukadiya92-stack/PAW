@@ -25,23 +25,26 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
   onOpenCertificate,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [matchedParticipant, setMatchedParticipant] = useState<Participant | null>(null);
+  const [matchedRecord, setMatchedParticipant] = useState<Participant | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!searchTerm.trim()) return;
     setHasSearched(true);
     const cleanSearch = searchTerm.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
     const found = participants.find((p) => {
-      const matchPhone = p.phone.replace(/[^0-9]/g, '').includes(cleanSearch);
-      const matchLogin = p.loginId.toLowerCase().replace(/[^a-z0-9]/g, '').includes(cleanSearch);
+      const matchPhone = p.phone.replace(/[^0-9]/g, '') === cleanSearch;
+      const matchLogin = p.loginId.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanSearch;
       const matchName = p.fullName.toLowerCase().includes(searchTerm.trim().toLowerCase());
-      return matchPhone || matchLogin || matchName;
+      return matchPhone || matchLogin;
     });
 
     setMatchedParticipant(found || null);
   };
+
+  const matchedParticipant = participants.find(p => p.id === matchedRecord?.id) || null;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 py-4">
@@ -97,7 +100,8 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
                 type="button"
                 onClick={() => {
                   setMatchedParticipant(p);
-                  setHasSearched(true);
+                  if (!searchTerm.trim()) return;
+    setHasSearched(true);
                 }}
                 className="px-2.5 py-1 rounded-lg text-[11px] bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium transition"
               >
