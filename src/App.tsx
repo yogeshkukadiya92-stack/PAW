@@ -1,3 +1,8 @@
+import { WorkshopMaintenance } from '@/components/WorkshopMaintenance';
+import { WorkshopCompletion } from '@/components/WorkshopCompletion';
+import { WorkshopReminders } from '@/components/WorkshopReminders';
+import { WorkshopAssignments } from '@/components/WorkshopAssignments';
+import { WorkshopSessions } from '@/components/WorkshopSessions';
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { 
@@ -16,6 +21,7 @@ import { AccountToolbar } from '@/components/AccountToolbar';
 import { AccountsModal } from '@/components/AccountsModal';
 import { ParticipantDashboard } from '@/components/ParticipantDashboard';
 
+import { WorkshopProgress } from '@/components/WorkshopProgress';
 import { Header } from '@/components/Header';
 import { NewBatchModal } from '@/components/NewBatchModal';
 import { MissionCallingView } from '@/components/MissionCallingView';
@@ -53,7 +59,8 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
     || batches[0];
   const setSelectedBatch = (batch: PAWBatch) => setSelectedBatchId(batch.id);
   const [currentRole, setCurrentRole] = useState<UserRole | 'PARTICIPANT_VIEW'>(user.role === 'PARTICIPANT' ? 'PARTICIPANT_VIEW' : canManage(user) ? 'PAW_HEAD' : user.role);
-  const [dashboardTab,setDashboardTab]=useState<DashboardTab>('reports');
+  const [dashboardTab,setDashboardTab]=useState<DashboardTab | 'progress' | 'assignments' | 'sessions' | 'completion' | 'maintenance'>('progress');
+  const [progressBatchId, setProgressBatchId] = useState('ALL');
   const [profileLanguage,setProfileLanguage]=useState<AssessmentLanguage>('en');
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
   const [legacyData] = useState<WorkspaceData | null>(() => user.role === 'PAW_HEAD' ? {batches:loadStoredBatches(), members:loadStoredMembers(), leads:loadStoredLeads(), participants:loadStoredParticipants()} : null);
@@ -460,19 +467,28 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
 
   if (user.role === 'PARTICIPANT') {
     const participant = participants.find(p => p.id === user.participantId);
-    return <div className="profile-app">{toolbar}{feedback}{accountsModal}{participant
-      ? <AssessmentExperience participant={participant} onSaveProgress={handleSaveAnswersProgress} onComplete={handleProfileComplete}/>
-      : <main className="profile-container"><div className="profile-panel"><h1>Your assessment profile is pending</h1><p className="profile-muted">Ask your PAW Head to link your participant record to this login. Your personal assessment will appear here once it is linked.</p></div></main>}</div>;
+    const personalBatch=batches.find(b=>b.id===participant?.pawBatchId);
+    return <div className="profile-app">{toolbar}{feedback}{accountsModal}<main className="profile-container workshop-progress">{participant&&personalBatch?<>
+      <ParticipantDashboard participant={participant} batch={personalBatch} onAssessment={()=>setIsAssessmentOpen(true)} onCertificate={p=>{setSelectedParticipantForCertificate(p);setIsCertificateOpen(true);}}/>
+      <WorkshopReminders participants={[participant]} batches={[personalBatch]} user={user} onOpen={r=>document.getElementById(`my-${r.section}`)?.scrollIntoView({behavior:'smooth',block:'start'})}/>
+      <div id="my-assignments"><WorkshopAssignments participants={[participant]} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>
+      </div><div id="my-sessions"><WorkshopSessions batch={personalBatch} participants={[participant]} user={user} onBatch={()=>{}} onUpdate={()=>{}}/>
+      </div><div id="my-completion"><WorkshopCompletion participants={[participant]} batches={[personalBatch]} user={user} onUpdate={()=>{}}/></div>
+      <div id="my-maintenance"><WorkshopMaintenance participants={[participant]} batch={personalBatch} members={members} user={user} onUpdate={()=>{}}/></div>
+      <AssessmentExperienceModal participant={participant} isOpen={isAssessmentOpen} onClose={()=>setIsAssessmentOpen(false)} onSaveProgress={handleSaveAnswersProgress} onComplete={handleProfileComplete}/>
+      <CertificateModal participant={selectedParticipantForCertificate} batch={personalBatch} isOpen={isCertificateOpen} onClose={()=>setIsCertificateOpen(false)}/>
+    </>:<div className="profile-panel"><h1>Your workshop profile is pending</h1><p className="profile-muted">Ask your PAW Head to link your participant record and workshop.</p></div>}</main></div>;
   }
 
   return (
     <div className="profile-app profile-dashboard-shell flex flex-col">
-      <ProfileHeader language={profileLanguage} onLanguage={setProfileLanguage} onHome={()=>setDashboardTab('reports')}/>{toolbar}{feedback}{accountsModal}
+      <ProfileHeader language={profileLanguage} onLanguage={setProfileLanguage} onHome={()=>setDashboardTab('progress')}/>{toolbar}{feedback}{accountsModal}
 
       {/* Main Content Area */}
       <main className="profile-container w-full flex-1">
-        <div className="profile-dashboard-heading"><h1>{roleLabels[user.role]} dashboard</h1><p className="profile-muted">Review assessment reports according to your assigned position.</p></div>
-        <nav className="profile-dashboard-tabs no-print" aria-label="Dashboard sections" role="tablist">{([['reports','Test reports'],['participants','Participants'],...(user.role==='PAW_HEAD'?[['questions','Question bank']]:[]),['operations','Workshop operations']] as [DashboardTab,string][]).map(([key,label])=><button role="tab" key={key} aria-selected={dashboardTab===key} onClick={()=>setDashboardTab(key)}>{label}{key==='reports'&&<small>{participants.reduce((total,p)=>total+participantReports(p).length,0)}</small>}{key==='participants'&&<small>{participants.length}</small>}</button>)}</nav>
+        <div className="profile-dashboard-heading"><h1>{roleLabels[user.role]} dashboard</h1><p className="profile-muted">Track workshop progress, assignments and attendance according to your assigned position.</p></div>
+        <nav className="profile-dashboard-tabs no-print" aria-label="Dashboard sections" role="tablist">{([['progress','Workshop progress'],['assignments','Assignments'],['sessions','Sessions & attendance'],['completion','Completion'],['maintenance','30 / 60 / 90-day follow-ups'],['reports','Test reports'],['participants','Participants'],...(user.role==='PAW_HEAD'?[['questions','Question bank']]:[]),['operations','Workshop operations']] as [DashboardTab | 'progress' | 'assignments' | 'sessions' | 'completion' | 'maintenance',string][]).map(([key,label])=><button role="tab" key={key} aria-selected={dashboardTab===key} onClick={()=>setDashboardTab(key)}>{label}{key==='reports'&&<small>{participants.reduce((total,p)=>total+participantReports(p).length,0)}</small>}{key==='participants'&&<small>{participants.length}</small>}</button>)}</nav>
+      <WorkshopReminders participants={participants} batches={batches} user={user} onOpen={r=>{setSelectedBatchId(r.batchId);setDashboardTab(r.section);if(r.section==='progress')setProgressBatchId(r.batchId);}}/>
       {/* Header */}
       {dashboardTab==='operations' && selectedBatch && <Header
         allowNavigation={canManage(user)}
@@ -495,7 +511,7 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
         onOpenEscalations={() => setIsEscalationsOpen(true)}
       />}
 
-        {dashboardTab!=='operations'?<AssessmentDashboard user={user} members={members} participants={participants} tab={dashboardTab} onAssessment={p=>{setSelectedParticipantForAssessment(p);setIsAssessmentOpen(true);}} onChangeMember={(id,parentId)=>setMembers(previous=>previous.map(m=>m.id===id?{...m,parentLeaderId:parentId||undefined}:m))} onAssignParticipant={(id,memberId)=>setParticipants(previous=>previous.map(p=>p.id===id?{...p,assignedWelcomeIclMemberId:memberId}:p))}/>:!selectedBatch?<section className="profile-panel profile-workshop-empty"><h2>{user.role==='PAW_HEAD'?'Create your first workshop':'No workshop assigned yet'}</h2><p className="profile-muted">Reports and the question bank are ready. Add a workshop to manage calling, registrations and follow-ups.</p>{user.role==='PAW_HEAD'?<div className="flex flex-wrap gap-3 mt-5"><button className="profile-button primary" onClick={()=>setIsNewBatchOpen(true)}>Create workshop</button><button className="profile-button" onClick={()=>setIsManageTeamOpen(true)}>Manage team</button></div>:<p className="profile-muted mt-4">Ask your PAW Head to assign your workshop and records.</p>}</section>:<>
+        {dashboardTab==='assignments'||dashboardTab==='sessions'||dashboardTab==='completion'||dashboardTab==='maintenance'?<div className="workshop-progress"><section className="profile-panel"><label>Workshop<select value={selectedBatch?.id||''} onChange={e=>setSelectedBatchId(e.target.value)}>{batches.map(b=><option key={b.id} value={b.id}>{b.name} · {b.code}</option>)}</select></label></section>{selectedBatch?dashboardTab==='maintenance'?<WorkshopMaintenance key={selectedBatch.id} participants={batchParticipants} batch={selectedBatch} members={members} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:dashboardTab==='completion'?<WorkshopCompletion key={selectedBatch.id} participants={batchParticipants} batches={batches} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:dashboardTab==='assignments'?<WorkshopAssignments key={selectedBatch.id} participants={batchParticipants} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:<WorkshopSessions key={selectedBatch.id} batch={selectedBatch} participants={batchParticipants} user={user} onBatch={batch=>setBatches(prev=>prev.map(b=>b.id===batch.id?batch:b))} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:<p className="profile-empty">Create a workshop from Workshop progress to get started.</p>}</div>:dashboardTab==='progress'?<WorkshopProgress user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))} onNavigate={(batchId,section)=>{setSelectedBatchId(batchId);setDashboardTab(section);}} batches={batches} participants={participants} members={members} leads={leads} selectedId={batches.some(b=>b.id===progressBatchId)?progressBatchId:'ALL'} onSelect={id=>{setProgressBatchId(id);if(id!=='ALL')setSelectedBatchId(id);}} onOperations={()=>setDashboardTab('operations')} onCreate={user.role==='PAW_HEAD'?()=>setIsNewBatchOpen(true):undefined}/>:dashboardTab!=='operations'?<AssessmentDashboard user={user} members={members} participants={participants} tab={dashboardTab} onAssessment={p=>{setSelectedParticipantForAssessment(p);setIsAssessmentOpen(true);}} onChangeMember={(id,parentId)=>setMembers(previous=>previous.map(m=>m.id===id?{...m,parentLeaderId:parentId||undefined}:m))} onAssignParticipant={(id,memberId)=>setParticipants(previous=>previous.map(p=>p.id===id?{...p,assignedWelcomeIclMemberId:memberId}:p))}/>:!selectedBatch?<section className="profile-panel profile-workshop-empty"><h2>{user.role==='PAW_HEAD'?'Create your first workshop':'No workshop assigned yet'}</h2><p className="profile-muted">Reports and the question bank are ready. Add a workshop to manage calling, registrations and follow-ups.</p>{user.role==='PAW_HEAD'?<div className="flex flex-wrap gap-3 mt-5"><button className="profile-button primary" onClick={()=>setIsNewBatchOpen(true)}>Create workshop</button><button className="profile-button" onClick={()=>setIsManageTeamOpen(true)}>Manage team</button></div>:<p className="profile-muted mt-4">Ask your PAW Head to assign your workshop and records.</p>}</section>:<>
         {/* View Switcher based on currentRole */}
         {currentRole === 'PARTICIPANT_VIEW' ? (
           <ParticipantLivePortal key={selectedBatch.id}

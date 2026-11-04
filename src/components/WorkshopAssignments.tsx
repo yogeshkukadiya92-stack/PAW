@@ -1,0 +1,34 @@
+import { useState } from 'react';
+import type { Participant, WorkshopAssignment, AssignmentEvent } from '@/types/paw';
+import { type LoginUser, canManage } from '@/lib/api';
+import { displayDate } from '@/lib/workshop-progress';
+
+export function WorkshopAssignments({participants,user,onUpdate}:{participants:Participant[];user:LoginUser;onUpdate:(id:string,update:(p:Participant)=>Participant)=>void}) {
+  const [title,setTitle]=useState('');const [instructions,setInstructions]=useState('');const [due,setDue]=useState('');const [target,setTarget]=useState('ALL');
+  const [search,setSearch]=useState('');const [filter,setFilter]=useState('All');const [message,setMessage]=useState('');
+  const personal=user.role==='PARTICIPANT',manager=canManage(user);
+  const rows=participants.flatMap(p=>(p.assignments||[]).map(task=>({p,task})));
+  const shown=rows.filter(({p,task})=>`${p.fullName} ${task.title}`.toLowerCase().includes(search.toLowerCase())&&(filter==='All'||(task.history.slice(-1)[0]?.action||'Pending')===filter));
+  const create=(e:React.FormEvent)=>{e.preventDefault();const dueDate=String(new FormData(e.currentTarget as HTMLFormElement).get('dueDate')||'');if(!title.trim()||!instructions.trim()||!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)||!Number.isFinite(Date.parse(dueDate))){setMessage('Enter a title, instructions and a valid due date.');return;}const targets=participants.filter(p=>target==='ALL'||p.id===target);if(!targets.length){setMessage('Choose participants in this workshop first.');return;}
+    const task:WorkshopAssignment={id:crypto.randomUUID(),title:title.trim(),instructions:instructions.trim(),dueDate,history:[]};
+    targets.forEach(p=>onUpdate(p.id,current=>({...current,assignments:[...(current.assignments||[]),task]})));setTitle('');setInstructions('');setDue('');setMessage(`Assignment added for ${targets.length} participant(s). Check the save status above.`);
+  };
+  const append=(participantId:string,taskId:string,event:AssignmentEvent)=>onUpdate(participantId,p=>({...p,assignments:(p.assignments||[]).map(t=>t.id===taskId?{...t,history:[...t.history,event]}:t)}));
+  return <section className="profile-panel workshop-assignments"><h2>{personal?'My assignments':'Workshop assignments'}</h2><p className="profile-muted">Submit an answer or a shared document link. Leaders review submissions and request corrections when needed.</p>
+    {manager&&<form className="workshop-form" onSubmit={create}><h3>Assign new work</h3><label>Title<input required maxLength={200} value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Instructions<textarea required maxLength={4000} value={instructions} onChange={e=>setInstructions(e.target.value)}/></label><div className="profile-filters"><label>Due date<input required name="dueDate" type="date" value={due} onChange={e=>setDue(e.target.value)}/></label><label>Assign to<select value={target} onChange={e=>setTarget(e.target.value)}><option value="ALL">All visible participants in this workshop ({participants.length})</option>{participants.map(p=><option value={p.id} key={p.id}>{p.fullName}</option>)}</select></label><button className="profile-button primary" disabled={!participants.length}>Assign work</button></div></form>}
+    {message&&<p role="status" className="workshop-note">{message}</p>}
+    <div className="profile-filters workshop-filters"><label>Search<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Participant or assignment"/></label><label>Status<select value={filter} onChange={e=>setFilter(e.target.value)}>{['All','Pending','Submitted','Approved','Changes_Requested'].map(s=><option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}</select></label></div>
+    {!shown.length&&<p className="profile-empty">No assignments in this view.</p>}{shown.map(({p,task})=><AssignmentCard key={`${p.id}-${task.id}`} task={task} participant={p} user={user} onAppend={event=>append(p.id,task.id,event)}/>)}
+  </section>;
+}
+function AssignmentCard({task,participant,user,onAppend}:{task:WorkshopAssignment;participant:Participant;user:LoginUser;onAppend:(e:AssignmentEvent)=>void}) {
+  const [answer,setAnswer]=useState(''),[link,setLink]=useState(''),[note,setNote]=useState('');
+  const last=task.history.slice(-1)[0];const personal=user.role==='PARTICIPANT';const canSubmit=personal&&(!last||last.action==='Changes_Requested');
+  const overdue=task.dueDate<new Date().toLocaleDateString('en-CA')&&(!last||last.action==='Changes_Requested');
+  const append=(action:AssignmentEvent['action'])=>{onAppend({id:crypto.randomUUID(),action,answer:action==='Submitted'?answer.trim():'',link:action==='Submitted'?link.trim():'',note:action==='Submitted'?'':note.trim(),at:new Date().toISOString(),by:user.name});setAnswer('');setLink('');setNote('');};
+  return <article className="workshop-assignment-card"><div className="profile-question-heading"><div><h3>{task.title}</h3><p className="profile-muted">{participant.fullName} · Due {displayDate(task.dueDate)}{overdue?' · Overdue':''}</p></div><span className={last?.action==='Approved'?'profile-done':'profile-pending'}>{(last?.action||'Pending').replace(/_/g,' ')}</span></div><p className="workshop-instructions">{task.instructions}</p>
+    {canSubmit&&<form className="workshop-form" onSubmit={e=>{e.preventDefault();append('Submitted');}}><label>Your answer<textarea maxLength={10000} value={answer} onChange={e=>setAnswer(e.target.value)}/></label><label>Submission link (optional)<input type="url" pattern="https?://.*" placeholder="https://…" maxLength={2000} value={link} onChange={e=>setLink(e.target.value)}/></label><button className="profile-button primary" disabled={!answer.trim()&&!link.trim()}>Submit assignment</button><small>Share a document or file link that your leader can open.</small></form>}
+    {canManage(user)&&last?.action==='Submitted'&&<form className="workshop-form" onSubmit={e=>{e.preventDefault();append('Approved');}}><label>Review feedback<textarea maxLength={4000} value={note} onChange={e=>setNote(e.target.value)}/></label><div className="profile-filters"><button className="profile-button primary">Approve</button><button type="button" className="profile-button" disabled={!note.trim()} onClick={()=>append('Changes_Requested')}>Request corrections</button></div></form>}
+    {!!task.history.length&&<details><summary>Submission and review history ({task.history.length})</summary>{task.history.map(event=><div className="workshop-log" key={event.id}><strong>{event.action.replace(/_/g,' ')} · {displayDate(event.at)} · {event.by}</strong>{event.answer&&<p>{event.answer}</p>}{event.link&&/^https?:\/\//i.test(event.link)&&<a className="profile-text-button" href={event.link} target="_blank" rel="noopener noreferrer">Open submitted document ↗</a>}{event.note&&<p>{event.note}</p>}</div>)}</details>}
+  </article>;
+}

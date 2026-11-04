@@ -146,3 +146,129 @@ test('report history is immutable, server-scored, retains retakes, and rejects i
     saved=await patch(client,snapshot,{participants:{upsert:[{...current,assessmentReports:[second,...current.assessmentReports]}],remove:[]}});assert.equal(saved.status,200,saved.body.error);assert.equal(saved.body.data.participants[0].assessmentReports.length,2);
   }finally{await env.close();}
 });
+
+test('workshop assignment submission, correction and approval preserve history and enforce roles',async()=>{
+ const env=await environment();try{
+  const {admin,login}=await fixture(env);
+  const {client:participant}=await login('PARTICIPANT','participant-1');
+  const {client:leader}=await login('LEADER','leader-1');
+  let snapshot=(await leader.request('/api/state')).body;
+  let p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  const task={id:'task-1',title:'Reflection',instructions:'Write your learning',dueDate:'2026-12-01',history:[]};
+  let result=await patch(leader,snapshot,{participants:{upsert:[{...p,assignments:[task]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  snapshot=(await participant.request('/api/state')).body;p=snapshot.data.participants[0];
+  const submit={id:'submission-1',action:'Submitted',answer:'My learning',link:'',note:'',at:'2000-01-01',by:'forged'};
+  const submitTask={...p.assignments[0],history:[submit]};
+  assert.equal((await patch(participant,snapshot,{participants:{upsert:[{...p,assignments:[{...submitTask,title:'Changed'}]}],remove:[]}})).status,403);
+  assert.equal((await patch(participant,snapshot,{participants:{upsert:[{...p,assignments:[{...task,history:[{...submit,action:'Approved'}]}]}],remove:[]}})).status,403);
+  result=await patch(participant,snapshot,{participants:{upsert:[{...p,assignments:[submitTask]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  let stored=result.body.data.participants[0].assignments[0].history[0];assert.notEqual(stored.by,'forged');assert.notEqual(stored.at,'2000-01-01');
+  snapshot=(await leader.request('/api/state')).body;p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  const correction={id:'review-1',action:'Changes_Requested',answer:'',link:'',note:'Please add an example',at:new Date().toISOString(),by:''};
+  result=await patch(leader,snapshot,{participants:{upsert:[{...p,assignments:[{...p.assignments[0],history:[...p.assignments[0].history,correction]}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  snapshot=(await participant.request('/api/state')).body;p=snapshot.data.participants[0];
+  result=await patch(participant,snapshot,{participants:{upsert:[{...p,assignments:[{...p.assignments[0],history:[...p.assignments[0].history,{...submit,id:'submission-2',answer:'My example'}]}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  snapshot=(await leader.request('/api/state')).body;p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  result=await patch(leader,snapshot,{participants:{upsert:[{...p,assignments:[{...p.assignments[0],history:[...p.assignments[0].history,{...correction,id:'review-2',action:'Approved'}]}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  snapshot=(await participant.request('/api/state')).body;p=snapshot.data.participants[0];
+  assert.equal(p.assignments[0].history.length,4);assert.equal(p.assignments[0].history.at(-1).action,'Approved');
+  assert.equal((await patch(participant,snapshot,{participants:{upsert:[{...p,assignments:[]}],remove:[]}})).status,403);
+  assert.equal((await patch(participant,snapshot,{participants:{upsert:[{...p,assignments:[{...p.assignments[0],history:[]}]}],remove:[]}})).status,403);
+ }finally{await env.close();}
+});
+
+test('scheduled session attendance is staff-only and validates session references and safe links',async()=>{
+ const env=await environment();try{
+  const {admin,login}=await fixture(env);const {client:participant}=await login('PARTICIPANT','participant-1');const {client:welcome}=await login('WELCOME_MEMBER','welcome-1');
+  let snapshot=(await admin.request('/api/state')).body;const batch=snapshot.data.batches[0];
+  const session={id:'session-1',title:'Introduction',startsAt:'2026-12-01T10:00:00Z',link:'https://example.com/meet'};
+  assert.equal((await patch(admin,snapshot,{batches:{upsert:[{...batch,sessions:[{...session,link:'javascript:alert(1)'}]}],remove:[]}})).status,400);
+  assert.equal((await patch(admin,snapshot,{batches:{upsert:[{...batch,sessions:[session]}],remove:[]}})).status,200);
+  snapshot=(await participant.request('/api/state')).body;let p=snapshot.data.participants[0];
+  const attendance={sessionId:session.id,status:'Present',note:'Joined on time',updatedAt:'2000-01-01',updatedBy:'forged'};
+  assert.equal((await patch(participant,snapshot,{participants:{upsert:[{...p,sessionAttendance:[attendance]}],remove:[]}})).status,403);
+  snapshot=(await welcome.request('/api/state')).body;p=snapshot.data.participants[0];
+  assert.equal((await patch(welcome,snapshot,{participants:{upsert:[{...p,sessionAttendance:[{...attendance,sessionId:'other'}]}],remove:[]}})).status,400);
+  const result=await patch(welcome,snapshot,{participants:{upsert:[{...p,sessionAttendance:[attendance]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  assert.notEqual(result.body.data.participants[0].sessionAttendance[0].updatedBy,'forged');
+  assert.equal((await participant.request('/api/state')).body.data.participants[0].sessionAttendance[0].status,'Present');
+ }finally{await env.close();}
+});
+
+test('follow-up actions are staff-only, append-only, server-attributed and scoped to assigned participants',async()=>{
+ const env=await environment();try{
+  const {admin,login}=await fixture(env);const {client:participant}=await login('PARTICIPANT','participant-1');const {client:welcome}=await login('WELCOME_MEMBER','welcome-1');const {client:leader}=await login('LEADER','leader-1');
+  let snapshot=(await participant.request('/api/state')).body,p=snapshot.data.participants[0];
+  const event={id:'followup-1',action:'Opened',note:'Call participant tomorrow',nextFollowupDate:'2026-12-01',at:'2000-01-01',by:'forged'};
+  assert.equal((await patch(participant,snapshot,{participants:{upsert:[{...p,interventionEvents:[event]}],remove:[]}})).status,403);
+  snapshot=(await welcome.request('/api/state')).body;p=snapshot.data.participants[0];
+  const outsider=(await admin.request('/api/state')).body.data.participants.find(p=>p.id==='participant-2');
+  assert.equal((await patch(welcome,snapshot,{participants:{upsert:[{...outsider,interventionEvents:[event]}],remove:[]}})).status,403);
+  assert.equal((await patch(welcome,snapshot,{participants:{upsert:[{...p,interventionEvents:[{...event,action:'Resolved',nextFollowupDate:''}]}],remove:[]}})).status,400);
+  let result=await patch(welcome,snapshot,{participants:{upsert:[{...p,interventionEvents:[event]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  p=result.body.data.participants[0];assert.notEqual(p.interventionEvents[0].by,'forged');assert.notEqual(p.interventionEvents[0].at,'2000-01-01');
+  snapshot=(await leader.request('/api/state')).body;p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  assert.equal((await patch(leader,snapshot,{participants:{upsert:[{...p,interventionEvents:[]}],remove:[]}})).status,403);
+  assert.equal((await patch(leader,snapshot,{participants:{upsert:[{...p,interventionEvents:[{...p.interventionEvents[0],note:'Rewrite'}]}],remove:[]}})).status,403);
+  result=await patch(leader,snapshot,{participants:{upsert:[{...p,interventionEvents:[...p.interventionEvents,{...event,id:'note-1',action:'Note',note:'Rescheduled call'}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  snapshot=result.body;p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  result=await patch(leader,snapshot,{participants:{upsert:[{...p,interventionEvents:[...p.interventionEvents,{...event,id:'resolve-1',action:'Resolved',note:'Participant contacted',nextFollowupDate:''}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  snapshot=result.body;p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  result=await patch(leader,snapshot,{participants:{upsert:[{...p,interventionEvents:[...p.interventionEvents,{...event,id:'reopen-1'}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  assert.equal(result.body.data.participants.find(p=>p.id==='participant-1').interventionEvents.length,4);
+ }finally{await env.close();}
+});
+
+test('completion requires server-verified readiness, leader permissions and immutable decision history',async()=>{
+ const env=await environment();try{
+  const {admin,login}=await fixture(env);const {client:leader}=await login('LEADER','leader-1');const {client:participant}=await login('PARTICIPANT','participant-1');const {client:welcome}=await login('WELCOME_MEMBER','welcome-1');
+  const event={id:'complete-1',action:'Completed',note:'Workshop requirements verified',at:'2000-01-01',by:'forged'};
+  let snapshot=(await leader.request('/api/state')).body,p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  assert.equal((await patch(leader,snapshot,{participants:{upsert:[{...p,completionEvents:[event]}],remove:[]}})).status,400);
+  snapshot=(await participant.request('/api/state')).body;p=snapshot.data.participants[0];
+  assert.equal((await patch(participant,snapshot,{participants:{upsert:[{...p,completionEvents:[event]}],remove:[]}})).status,403);
+  snapshot=(await welcome.request('/api/state')).body;p=snapshot.data.participants[0];
+  assert.equal((await patch(welcome,snapshot,{participants:{upsert:[{...p,completionEvents:[event]}],remove:[]}})).status,403);
+  snapshot=(await admin.request('/api/state')).body;p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  const {questions}=await import('../shared/assessment.mjs');
+  const answers=Object.fromEntries(questions.map(q=>[q.questionNumber,q.options[0].value]));
+  const followups=[1,2,3].map(day=>({id:`ready-${day}`,date:'2026-10-20',sessionNumber:day,attended:true,assignmentCompleted:true,supportRequired:'None',iclRemark:'Attended',escalatedToLeader:false}));
+  let result=await patch(admin,snapshot,{participants:{upsert:[{...p,assessmentAnswers:answers,firstAssignmentStatus:'Report_Generated',followups}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  snapshot=(await leader.request('/api/state')).body;p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  result=await patch(leader,snapshot,{participants:{upsert:[{...p,completionEvents:[event]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  p=result.body.data.participants.find(p=>p.id==='participant-1');assert.notEqual(p.completionEvents[0].by,'forged');assert.notEqual(p.completionEvents[0].at,'2000-01-01');snapshot=result.body;
+  assert.equal((await patch(leader,snapshot,{participants:{upsert:[{...p,completionEvents:[]}],remove:[]}})).status,403);
+  result=await patch(leader,snapshot,{participants:{upsert:[{...p,completionEvents:[...p.completionEvents,{...event,id:'reopen-1',action:'Reopened',note:'Additional review required'}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  snapshot=(await admin.request('/api/state')).body;p=snapshot.data.participants.find(p=>p.id==='participant-1');const b=snapshot.data.batches[0];
+  result=await patch(admin,snapshot,{batches:{upsert:[{...b,sessions:[{id:'future',title:'Future session',startsAt:'2099-12-01T00:00:00Z',link:''}]}],remove:[]},participants:{upsert:[{...p,completionEvents:[...p.completionEvents,{...event,id:'complete-2'}],sessionAttendance:[{sessionId:'future',status:'Present',note:'',updatedAt:new Date().toISOString(),updatedBy:''}]}],remove:[]}});assert.equal(result.status,400,'Future sessions in the same request must block completion.');
+ }finally{await env.close();}
+});
+
+test('30/60/90-day follow-ups preserve history, stamp the actor, and restrict edits to assigned staff',async()=>{
+ const env=await environment();try{
+  const {admin,login}=await fixture(env);const {client:welcome}=await login('WELCOME_MEMBER','welcome-1');const {client:participant}=await login('PARTICIPANT','participant-1');const {client:leader}=await login('LEADER','leader-1');
+  const event={id:'maintenance-30',day:30,outcome:'Unreachable',note:'No answer, try again',nextFollowupDate:'2026-12-01',at:'2000-01-01',by:'forged'};
+  let snapshot=(await participant.request('/api/state')).body,p=snapshot.data.participants[0];
+  assert.equal((await patch(participant,snapshot,{participants:{upsert:[{...p,maintenanceEvents:[event]}],remove:[]}})).status,403);
+  snapshot=(await welcome.request('/api/state')).body;p=snapshot.data.participants[0];
+  const outside=(await admin.request('/api/state')).body.data.participants.find(p=>p.id==='participant-2');
+  assert.equal((await patch(welcome,snapshot,{participants:{upsert:[{...outside,maintenanceEvents:[event]}],remove:[]}})).status,403);
+  assert.equal((await patch(welcome,snapshot,{participants:{upsert:[{...p,maintenanceEvents:[{...event,day:45}]}],remove:[]}})).status,400);
+  assert.equal((await patch(welcome,snapshot,{participants:{upsert:[{...p,maintenanceEvents:[{...event,nextFollowupDate:''}]}],remove:[]}})).status,400);
+  assert.equal((await patch(welcome,snapshot,{participants:{upsert:[{...p,maintenanceEvents:[{...event,nextFollowupDate:'2026-02-30'}]}],remove:[]}})).status,400);
+  let result=await patch(welcome,snapshot,{participants:{upsert:[{...p,maintenanceEvents:[event]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  p=result.body.data.participants[0];assert.notEqual(p.maintenanceEvents[0].by,'forged');assert.notEqual(p.maintenanceEvents[0].at,'2000-01-01');
+  snapshot=(await leader.request('/api/state')).body;p=snapshot.data.participants.find(p=>p.id==='participant-1');
+  assert.equal((await patch(leader,snapshot,{participants:{upsert:[{...p,maintenanceEvents:[]}],remove:[]}})).status,403);
+  result=await patch(leader,snapshot,{participants:{upsert:[{...p,maintenanceEvents:[...p.maintenanceEvents,{...event,id:'maintenance-complete',outcome:'Completed',note:'Follow-up completed',nextFollowupDate:''}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  assert.equal(result.body.data.participants.find(p=>p.id==='participant-1').maintenanceEvents.length,2);
+  assert.equal((await participant.request('/api/state')).body.data.participants[0].maintenanceEvents.at(-1).outcome,'Completed');
+ }finally{await env.close();}
+});
+test('post-workshop updates cannot be recorded before the final workshop end date',async()=>{
+ const env=await environment();try{
+  const {admin}=await fixture(env);const snapshot=(await admin.request('/api/state')).body;const batch=snapshot.data.batches[0],p=snapshot.data.participants[0];
+  const result=await patch(admin,snapshot,{batches:{upsert:[{...batch,startDate:'2099-01-01',endDate:'2099-01-03'}],remove:[]},participants:{upsert:[{...p,maintenanceEvents:[{id:'early',day:30,outcome:'Completed',note:'Early entry',nextFollowupDate:'',at:new Date().toISOString(),by:''}]}],remove:[]}});
+  assert.equal(result.status,400);
+ }finally{await env.close();}
+});

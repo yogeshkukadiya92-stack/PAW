@@ -1,3 +1,4 @@
+import { validateCompletionChanges, validateMaintenanceChanges } from './workshop.mjs';
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -238,6 +239,8 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
           }
           normalizeReports(next,data);
           validateState(next);
+          validateCompletionChanges(next,data);
+          validateMaintenanceChanges(next,data);
           // Linked accounts must not be orphaned or silently gain a different role.
           for (const account of db.prepare('SELECT * FROM users').all()) {
             if (account.member_id && !next.members.some(m => m.id === account.member_id && m.role === account.role)) throw failure(400,'This member has a linked login. Keep the member and their role; disable the login if access is no longer needed.');

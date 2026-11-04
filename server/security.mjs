@@ -1,3 +1,4 @@
+import { authorizeWorkshop, validateWorkshop, stampAttendance, authorizeIntervention, authorizeCompletion, authorizeMaintenance } from './workshop.mjs';
 import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 const derive = promisify(scrypt);
@@ -61,11 +62,12 @@ export function visibleState(state, user) {
   // Staff directories only expose fields needed for assignment; no emails/phone numbers of others.
   return { batches, members: members.map(m => m.id === user.memberId ? m : {...m, phone: '', email: ''}), leads: ownLeads, participants: ownParticipants };
 }
-const participantFields = ['assessmentReports', 'preferredLanguage', 'assessmentAnswers', 'firstAssignmentStatus', 'personalityType', 'temperamentScores', 'dominantTemperament', 'secondaryTemperament'];
-const welcomeFields = ['welcomeCallStatus', 'welcomeChecklist', 'whatsappGroupJoined', 'followups', ...participantFields];
+const participantFields = ['assignments', 'assessmentReports', 'preferredLanguage', 'assessmentAnswers', 'firstAssignmentStatus', 'personalityType', 'temperamentScores', 'dominantTemperament', 'secondaryTemperament'];
+const welcomeFields = ['maintenanceEvents', 'interventionEvents', 'sessionAttendance', 'welcomeCallStatus', 'welcomeChecklist', 'whatsappGroupJoined', 'followups', ...participantFields];
 const callingFields = ['callStatus', 'callLogs', 'nextFollowupDate', 'lastCalledAt'];
 const changedFields = (before, after) => new Set([...Object.keys(before), ...Object.keys(after)].filter(key => JSON.stringify(before[key]) !== JSON.stringify(after[key])));
 export function authorizeChange(collection, old, next, user, state) {
+  if (collection === 'participants' && next) { authorizeMaintenance(old,next,user); authorizeCompletion(old,next,user); authorizeIntervention(old,next,user); authorizeWorkshop(old,next,user); stampAttendance(old,next,user); }
   if (isAdmin(user)) return;
   if (collection === 'members' || collection === 'batches' || !next) throw failure(403, 'Only the PAW Head can manage batches and team members.');
   if (isManager(user)) {
@@ -83,7 +85,7 @@ export function authorizeChange(collection, old, next, user, state) {
     if (user.role === 'PARTICIPANT' && old?.id === user.participantId && next.id === user.participantId &&
       [...changedFields(old, next)].every(key => participantFields.includes(key))) return;
     if (user.role === 'WELCOME_MEMBER' && next.assignedWelcomeIclMemberId === user.memberId && (!old || old.assignedWelcomeIclMemberId === user.memberId)) {
-      if (!old || [...changedFields(old, next)].every(key => welcomeFields.includes(key))) return;
+      if ((!old || [...changedFields(old, next)].every(key => welcomeFields.includes(key))) && JSON.stringify(old?.assignments || []) === JSON.stringify(next.assignments || [])) return;
     }
     // Calling staff may register only contacts that belong to their own lead list.
     if (user.role === 'CALLING_MEMBER' && !old && next.assignedCallingMemberId === user.memberId) return;
@@ -164,6 +166,7 @@ export function validateState(state) {
       }
     }
   }
+  validateWorkshop(state);
   const logins = state.participants.map(p => p.loginId.toLowerCase());
   if (new Set(logins).size !== logins.length) throw failure(400,'Participant login IDs must be unique.');
 }

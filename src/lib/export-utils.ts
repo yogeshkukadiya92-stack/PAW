@@ -1,9 +1,12 @@
-function downloadCSV(rows: unknown[][], filename: string) {
-  const csv = '\uFEFF' + rows.map(row => row.map(value => {
+export function csvText(rows: unknown[][]) {
+  return '\uFEFF' + rows.map(row => row.map(value => {
     const text = String(value ?? '');
-    const safe = /^[=+@-]/.test(text) ? `'${text}` : text;
+    const safe = /^[\s\uFEFF]*[=+@-]/.test(text) ? `'${text}` : text;
     return `"${safe.replace(/"/g, '""')}"`;
   }).join(',')).join('\r\n');
+}
+export function downloadCSV(rows: unknown[][], filename: string) {
+  const csv = csvText(rows);
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
   const link = document.createElement('a');
   link.href = url;

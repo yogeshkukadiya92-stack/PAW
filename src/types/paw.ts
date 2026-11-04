@@ -14,6 +14,7 @@ export type CallingCapacity = 15 | 25 | 35;
 export type PreferredLanguage = 'en' | 'gu' | 'hi' | 'mr';
 
 export interface PAWBatch {
+  sessions?: WorkshopSession[];
   id: string;
   name: string;
   code: string;
@@ -100,6 +101,11 @@ export interface DailyFollowupLog {
 }
 
 export interface Participant {
+  maintenanceEvents?: MaintenanceEvent[];
+  completionEvents?: CompletionEvent[];
+  interventionEvents?: InterventionEvent[];
+  assignments?: WorkshopAssignment[];
+  sessionAttendance?: SessionAttendance[];
   assessmentReports?: import('@/lib/assessment').AssessmentReport[];
   id: string;
   loginId: string;
@@ -142,3 +148,60 @@ export interface Participant {
   followups: DailyFollowupLog[];
 }
 
+
+export interface AssignmentEvent {
+  id: string;
+  action: 'Submitted' | 'Approved' | 'Changes_Requested';
+  answer: string;
+  link: string;
+  note: string;
+  at: string;
+  by: string;
+}
+export interface WorkshopAssignment {
+  id: string;
+  title: string;
+  instructions: string;
+  dueDate: string;
+  history: AssignmentEvent[];
+}
+export interface WorkshopSession {
+  id: string;
+  title: string;
+  startsAt: string;
+  link: string;
+}
+export interface SessionAttendance {
+  sessionId: string;
+  status: 'Present' | 'Absent' | 'Late' | 'Excused';
+  note: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface InterventionEvent {
+  id: string;
+  action: 'Opened' | 'Note' | 'Resolved';
+  note: string;
+  nextFollowupDate: string;
+  at: string;
+  by: string;
+}
+
+export interface CompletionEvent {
+  id: string;
+  action: 'Completed' | 'Reopened';
+  note: string;
+  at: string;
+  by: string;
+}
+
+export interface MaintenanceEvent {
+  id: string;
+  day: number;
+  outcome: 'Completed' | 'Unreachable' | 'Support_Required' | 'Rescheduled';
+  note: string;
+  nextFollowupDate: string;
+  at: string;
+  by: string;
+}

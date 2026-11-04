@@ -123,3 +123,19 @@ For a hosted instance, use `npm start` behind HTTPS, set `PAW_APP_ORIGIN` and a 
 
 ## License
 MIT
+
+### Workshop completion and in-app reminders
+
+The Completion tab shows each participant as In progress, Ready for review, Completed or Needs review. Leaders can record completion with a note, or reopen a completed participant with a reason. Decisions are attributed and timestamped by the server, retained in the activity timeline, and cannot be rewritten. Participants and welcome staff cannot make completion decisions.
+
+Readiness requires a generated personality report, approval of every assigned workshop task, Present or Late attendance for every scheduled session, no future scheduled sessions, and no open follow-up or leader escalation. With no scheduled sessions, the existing Day 1–3 attendance is used. Excused attendance does not count as Present. Additional work after sign-off shows Needs review without discarding the earlier decision. Existing assessment-based certificate access remains separate from workshop completion.
+
+Reminders are calculated inside the app for overdue assignments, corrections, due-soon work, upcoming sessions, staff attendance gaps, pending leader reviews and due follow-ups. They refresh while the app is open and disappear as the underlying work is resolved. No WhatsApp, email or push delivery is configured. Staff reminders and completion records follow the existing hierarchy permissions; participants see their own records.
+
+Run `node qa/progress/check.mjs` for progress, report, reminder and readiness checks, and `npm test` for server authorization and workflow integration tests.
+
+### 30 / 60 / 90-day post-workshop follow-ups
+
+The post-workshop tab calculates three milestones from each workshop's end date using calendar days. Staff can record Completed, Unreachable, Support Required or Rescheduled, with a note and a next date for any unfinished outcome. The latest entry controls the current status; all earlier entries remain in the participant activity timeline. A retry date replaces the active due date while preserving the original milestone date.
+
+Only administrators, assigned leaders and the participant's assigned welcome member can record follow-ups. Participants have a read-only view of their own schedule and results. Entries open on the workshop's end date. Due and overdue milestones appear in app reminders and the leader queue; support requests remain visible even with a future retry date. Filters cover participant, member, milestone, status and outcome, with a CSV export of the filtered results. No external messages are sent.
