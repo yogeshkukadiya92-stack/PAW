@@ -1,4 +1,5 @@
 import React from 'react';
+import { useDialog } from '@/lib/use-dialog';
 import { X, ShieldAlert, PhoneCall, CheckCircle2 } from 'lucide-react';
 import { Participant, ICLMember } from '@/types/paw';
 
@@ -17,18 +18,19 @@ export const EscalationDrawer: React.FC<EscalationDrawerProps> = ({
   welcomeMembers,
   onResolveEscalation,
 }) => {
+  const dialogRef = useDialog(onClose, isOpen);
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/40 backdrop-blur-xs">
-      <div className="relative w-full max-w-md h-full bg-white border-l border-slate-200 p-6 shadow-2xl overflow-y-auto">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="escalation-title" tabIndex={-1} className="relative w-full max-w-md h-full bg-white border-l border-slate-200 p-6 shadow-2xl overflow-y-auto">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div className="flex items-center space-x-2">
             <ShieldAlert className="w-5 h-5 text-rose-600" />
             <div>
-              <h3 className="text-base font-bold text-slate-900">
+              <h2 id="escalation-title" className="text-base font-bold text-slate-900">
                 Leader Escalation Hub
-              </h3>
+              </h2>
               <p className="text-xs text-rose-700">
                 {escalatedParticipants.length} Participants Need Attention
               </p>
@@ -36,6 +38,7 @@ export const EscalationDrawer: React.FC<EscalationDrawerProps> = ({
           </div>
 
           <button
+            aria-label="Close escalations"
             onClick={onClose}
             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
           >

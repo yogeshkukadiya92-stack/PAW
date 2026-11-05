@@ -355,7 +355,8 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
 
       {/* Leads Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        <p className="profile-table-scroll-note">Scroll sideways to see all lead details and actions.</p>
+        <div className="profile-table-wrap" role="region" aria-label="Calling leads table" tabIndex={0}>
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider text-[10px] border-b border-slate-200">
               <tr>

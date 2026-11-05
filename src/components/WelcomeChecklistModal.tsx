@@ -55,8 +55,9 @@ const WelcomeChecklistModalContent: React.FC<WelcomeChecklistModalProps> = ({
   };
 
   const handleEscalate = () => {
-    if (!escalateReason) return;
-    onEscalateToLeader(participant.id, escalateReason);
+    const reason = escalateReason.trim();
+    if (!reason) return;
+    onEscalateToLeader(participant.id, reason);
     setShowEscalate(false);
     onClose();
   };
@@ -258,10 +259,11 @@ const WelcomeChecklistModalContent: React.FC<WelcomeChecklistModalProps> = ({
           {/* Escalation input box if toggled */}
           {showEscalate && (
             <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 space-y-2">
-              <span className="text-xs font-semibold text-rose-800 block">
-                Reason for Leader Escalation:
-              </span>
+              <label htmlFor="escalation-reason" className="text-xs font-semibold text-rose-800 block">
+                Reason for escalation
+              </label>
               <input
+                id="escalation-reason"
                 type="text"
                 placeholder="e.g. Phone unreachable after 3 attempts..."
                 value={escalateReason}
@@ -271,6 +273,7 @@ const WelcomeChecklistModalContent: React.FC<WelcomeChecklistModalProps> = ({
               <button
                 type="button"
                 onClick={handleEscalate}
+                disabled={!escalateReason.trim()}
                 className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition"
               >
                 Escalate Now

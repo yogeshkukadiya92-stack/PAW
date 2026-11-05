@@ -1,32 +1,32 @@
-import React, { useState } from 'react';
-import { 
-  User, 
-  Phone, 
-  Sparkles, 
-  CheckCircle2, 
-  ArrowRight, 
-  BookOpen, 
-  LogIn, 
-  Award,
-  Search,
-  Check
-} from 'lucide-react';
-import { Participant } from '@/types/paw';
+import React, { useEffect, useRef, useState } from 'react';
+import { Sparkles, ArrowRight, BookOpen, Search, Award } from 'lucide-react';
+import { ASSESSMENT_LANGUAGES } from '@/lib/assessment-i18n';
+import { participantReports } from '@/lib/assessment';
+import type { Participant } from '@/types/paw';
 
 interface ParticipantLivePortalProps {
   participants: Participant[];
+  workshopName: string;
   onOpenAssessment: (participant: Participant) => void;
   onOpenCertificate: (participant: Participant) => void;
 }
 
 export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
   participants,
+  workshopName,
   onOpenAssessment,
   onOpenCertificate,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [matchedRecord, setMatchedParticipant] = useState<Participant | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const resultHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const heading = resultHeading.current;
+    if (!hasSearched || !heading) return;
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: 'start' });
+  }, [hasSearched, matchedRecord]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,10 +34,9 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
     setHasSearched(true);
     const cleanSearch = searchTerm.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    const found = participants.find((p) => {
+    const found = cleanSearch && participants.find((p) => {
       const matchPhone = p.phone.replace(/[^0-9]/g, '') === cleanSearch;
       const matchLogin = p.loginId.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanSearch;
-      const matchName = p.fullName.toLowerCase().includes(searchTerm.trim().toLowerCase());
       return matchPhone || matchLogin;
     });
 
@@ -45,6 +44,8 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
   };
 
   const matchedParticipant = participants.find(p => p.id === matchedRecord?.id) || null;
+  const language = matchedParticipant && (participantReports(matchedParticipant)[0]?.language || matchedParticipant.preferredLanguage);
+  const languageLabel = ASSESSMENT_LANGUAGES.find(option => option.value === language)?.label;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 py-4">
@@ -55,61 +56,58 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
         </div>
         <div>
           <span className="text-xs font-semibold text-blue-700 tracking-wider uppercase">
-            Official Participant Portal
+            Participant assessments
           </span>
           <h2 className="text-xl font-bold text-slate-900 mt-1">
             PAW Personality Profile Analysis & First Assignment
           </h2>
           <p className="text-xs text-slate-600 max-w-lg mx-auto mt-1.5 leading-relaxed">
-            Welcome to the Coach For Life Personality Awareness Workshop (PAW). Enter your registered <strong>Mobile Number</strong> or <strong>Login ID</strong> to access your 40-question assessment and generated personality report.
+            Find a registered participant to open their 40-question assessment or view their personality report.
           </p>
         </div>
 
-        {/* Search / Login Form */}
-        <form onSubmit={handleSearch} className="max-w-md mx-auto pt-2 flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <form onSubmit={handleSearch} className="mx-auto max-w-md pt-2 text-left">
+          <label htmlFor="portal-lookup">Registered mobile number or login ID</label>
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
+              id="portal-lookup"
               type="text"
               required
-              placeholder="Enter Mobile No (e.g. 9825011223) or Login ID"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="Mobile number or login ID"
               value={searchTerm}
-              onChange={(e) => {
+              onChange={e=>{
                 setSearchTerm(e.target.value);
                 setHasSearched(false);
               }}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
             />
+            <button type="submit" className="profile-button primary shrink-0">
+              <Search size={16} aria-hidden="true"/> Find participant
+            </button>
           </div>
-          <button
-            type="submit"
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition shadow-xs flex items-center gap-1.5 shrink-0"
-          >
-            <LogIn className="w-4 h-4" />
-            <span>Access Portal</span>
-          </button>
         </form>
 
         {/* Quick Participant Chips for Convenience */}
-        <div className="pt-2 text-center">
-          <span className="text-[11px] text-slate-400 block mb-1.5">Or select any registered participant:</span>
+        {!!participants.length&&<div className="pt-2 text-center">
+          <span className="text-[11px] text-slate-400 block mb-1.5">Or choose a participant below</span>
           <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-xl mx-auto">
             {participants.slice(0, 5).map((p) => (
               <button
                 key={p.id}
                 type="button"
+                aria-pressed={hasSearched && matchedParticipant?.id === p.id}
                 onClick={() => {
                   setMatchedParticipant(p);
-                  if (!searchTerm.trim()) return;
-    setHasSearched(true);
+                  setHasSearched(true);
                 }}
-                className="px-2.5 py-1 rounded-lg text-[11px] bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium transition"
+                className="min-h-9 max-w-full [overflow-wrap:anywhere] px-2.5 py-1 rounded-lg text-xs bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium transition"
               >
                 {p.fullName} ({p.loginId})
               </button>
             ))}
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Matched Participant Result Card */}
@@ -120,15 +118,15 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
               <span className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide">
                 Participant Found
               </span>
-              <h3 className="text-base font-bold text-slate-900 mt-0.5">
+              <h3 ref={resultHeading} tabIndex={-1} className="scroll-mt-8 text-base font-bold text-slate-900 mt-0.5 [overflow-wrap:anywhere]">
                 {matchedParticipant.fullName}
               </h3>
-              <p className="text-xs text-slate-500 font-mono">
+              <p className="text-xs text-slate-500 font-mono [overflow-wrap:anywhere]">
                 Login ID: {matchedParticipant.loginId} • Phone: {matchedParticipant.phone} • City: {matchedParticipant.city}
               </p>
             </div>
 
-            <div className="flex flex-col items-end">
+            <div className="flex flex-col items-start sm:items-end">
               <span className="text-[11px] text-slate-400">Assignment Status</span>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                 matchedParticipant.firstAssignmentStatus === 'Report_Generated'
@@ -144,12 +142,12 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
               <span className="text-slate-500 block mb-0.5">Workshop Batch:</span>
-              <strong className="text-slate-800">{matchedParticipant.pawBatchId}</strong>
+              <strong className="text-slate-800">{workshopName}</strong>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
               <span className="text-slate-500 block mb-0.5">Assessment Language:</span>
-              <strong className="text-slate-800">English (Coach For Life)</strong>
+              <strong className="text-slate-800">{languageLabel || 'Choose when starting'}</strong>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
@@ -175,7 +173,7 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center space-x-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => onOpenAssessment(matchedParticipant)}
@@ -208,7 +206,7 @@ export const ParticipantLivePortal: React.FC<ParticipantLivePortalProps> = ({
 
       {hasSearched && !matchedParticipant && (
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs text-center space-y-2">
-          <p className="text-sm font-semibold text-slate-800">No participant found matching "{searchTerm}"</p>
+          <h3 ref={resultHeading} tabIndex={-1} className="scroll-mt-8 text-sm font-semibold text-slate-800 [overflow-wrap:anywhere]">No participant found matching “{searchTerm}”</h3>
           <p className="text-xs text-slate-500">
             Please verify your 10-digit mobile number or Login ID with your assigned ICL Member or PAW Head.
           </p>

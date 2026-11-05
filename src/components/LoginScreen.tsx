@@ -17,12 +17,12 @@ export function LoginScreen({mode,onMode,setupRequired,setupKeyRequired,onSigned
     } catch (e) {setError(e instanceof Error?e.message:'Unable to sign in.');} finally {setBusy(false);}
   };
   return <main className="profile-login-page"><div className="profile-login-grid">
-    <section className="profile-login-intro"><h1>{setup?'Set up your workspace':creating?'Create your participant account':'Welcome back'}</h1><p>{setup?'First-time setup is only for the workspace owner. A private setup key is required.':creating?'Create a personal login. Your administrator will connect your account to your workshop.':'Sign in with your existing login ID and password to open your dashboard.'}</p>{onBack&&<button className="profile-login-back" onClick={onBack}>← Continue to assessment</button>}</section>
+    <section className="profile-login-intro"><h1>{setup?'Set up your workspace':creating?'Create your participant account':'Welcome back'}</h1><p>{setup?(setupKeyRequired?'The workspace owner needs a private setup key to create the first admin account.':'The workspace owner can create the first admin account here.'):creating?'Create a personal login. Your administrator will connect your account to your workshop.':'Sign in with your existing login ID and password to open your dashboard.'}</p>{onBack&&<button className="profile-login-back" onClick={onBack}>← Continue to assessment</button>}</section>
     <section className="profile-login-form-card"><h2>{setup?'Create Main Admin account':creating?'Sign up':'Sign in'}</h2><p>{setup?'Choose a private login ID and password.':creating?'Participant access only. Your account stays private until your workshop is assigned.':'For administrators, sales and operations teams.'}</p>
-        <nav className="profile-actions mb-5" aria-label="Account access"><button className={mode==='sign-in'?'profile-button primary':'profile-button secondary'} onClick={()=>onMode('sign-in')}>Sign in</button></nav>
+        {mode!=='sign-in'&&<button className="profile-button secondary mb-5" onClick={()=>onMode('sign-in')}>Back to sign in</button>}
         {setupRequired&&!setup&&<div className="profile-error" role="status">This workspace has no accounts yet. The owner must complete first-time setup before staff can sign in. <button className="underline font-semibold" onClick={()=>onMode('setup')}>Set up workspace</button></div>}
-        {setup&&!setupRequired&&<p role="status" className="profile-error">Workspace setup is complete. Use Sign in above.</p>}
-        <form onSubmit={submit} className="space-y-4">
+        {setup&&!setupRequired&&<p role="status" className="profile-error">Workspace setup is complete. Sign in with your existing staff account.</p>}
+        {(!setup||setupRequired)&&<form onSubmit={submit} className="space-y-4">
           {error&&<p role="alert" className="bg-rose-50 border border-rose-200 text-rose-700 rounded-lg p-3 text-sm">{error}</p>}
           {creating&&<div><label htmlFor="login-name" className="auth-label">Your full name</label><input id="login-name" className="auth-input" autoComplete="name" required maxLength={120} value={name} onChange={e=>setName(e.target.value)}/></div>}
           <div><label htmlFor="login-id" className="auth-label">Login ID</label><input id="login-id" className="auth-input" autoComplete="username" autoCapitalize="none" spellCheck={false} required minLength={creating?3:undefined} maxLength={80} placeholder={creating?'Choose your login ID':'Enter your login ID'} value={username} onChange={e=>setUsername(e.target.value)}/>{creating&&<p className="text-xs text-slate-500 mt-1.5">Use letters, numbers, or . _ @ + -</p>}</div>
@@ -30,8 +30,8 @@ export function LoginScreen({mode,onMode,setupRequired,setupKeyRequired,onSigned
           {creating&&<div><label htmlFor="login-confirm" className="auth-label">Confirm password</label><input id="login-confirm" className="auth-input" type="password" autoComplete="new-password" required value={confirm} onChange={e=>setConfirm(e.target.value)}/></div>}
           {setup&&setupKeyRequired&&<div><label htmlFor="setup-key" className="auth-label">Workspace setup key</label><input id="setup-key" className="auth-input" type="password" autoComplete="off" required value={setupKey} onChange={e=>setSetupKey(e.target.value)}/><p className="text-xs text-slate-500 mt-1.5">Provided by the administrator who installed PAW.</p></div>}
           <button disabled={busy||(creating&&!setup&&setupRequired)||(setup&&!setupRequired)} className="auth-primary w-full justify-center py-3">{busy?<Loader2 className="animate-spin" size={18}/>:<ArrowRight size={18}/>}<span>{busy?'Please wait…':setup?'Create Main Admin account':creating?'Create account':'Sign in'}</span></button>
-        </form>
-        {!setupRequired&&<p className="text-xs leading-5 text-slate-500 mt-5">Need a login or forgot your password? Only your administrator can create staff accounts and manage permissions. Ask them to create or reset your login.</p>}
+        </form>}
+        {!setupRequired&&<p className="profile-login-help text-xs leading-5 text-slate-500">Need a login or forgot your password? Only your administrator can create staff accounts and manage permissions. Ask them to create or reset your login.</p>}
       </section>
     </div>
   </main>;

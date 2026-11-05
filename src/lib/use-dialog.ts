@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 
-export function useDialog(onClose: () => void) {
+export function useDialog(onClose: () => void, active = true) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
     const dialog = ref.current;
-    if (!dialog) return;
+    if (!active || !dialog) return;
     const previousFocus = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -50,6 +50,6 @@ export function useDialog(onClose: () => void) {
       document.body.style.overflow = previousOverflow;
       if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, []);
+  }, [active]);
   return ref;
 }
