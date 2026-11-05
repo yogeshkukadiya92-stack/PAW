@@ -1,4 +1,5 @@
 import { ACCESS, accessFor } from '../shared/access.mjs';
+import { installCflSync } from './cfl-sync.mjs';
 import { validateCompletionChanges, validateMaintenanceChanges } from './workshop.mjs';
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
@@ -12,7 +13,7 @@ const emptyState = () => ({ batches: [], members: [], leads: [], participants: [
 const cookieName = 'paw_session';
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2'};
 
-export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || resolve('data/paw.sqlite'), production = process.env.NODE_ENV === 'production', appOrigin = process.env.PAW_APP_ORIGIN, setupToken = process.env.PAW_SETUP_TOKEN || '', adminEmail = process.env.PAW_ADMIN_EMAIL || '', adminPassword = process.env.PAW_ADMIN_PASSWORD || '', adminName = process.env.PAW_ADMIN_NAME || 'Main Admin', distPath = resolve('dist') } = {}) {
+export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || resolve('data/paw.sqlite'), production = process.env.NODE_ENV === 'production', appOrigin = process.env.PAW_APP_ORIGIN, setupToken = process.env.PAW_SETUP_TOKEN || '', adminEmail = process.env.PAW_ADMIN_EMAIL || '', adminPassword = process.env.PAW_ADMIN_PASSWORD || '', adminName = process.env.PAW_ADMIN_NAME || 'Main Admin', cflBaseUrl = process.env.CFL_API_BASE_URL || '', cflToken = process.env.CFL_PAW_API_KEY || '', cflFetch = fetch, cflIntervalMs = 60000, distPath = resolve('dist') } = {}) {
   if (dbPath !== ':memory:') { mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 }); }
   const db = new DatabaseSync(dbPath);
   if (dbPath !== ':memory:') chmodSync(dbPath, 0o600);
@@ -122,6 +123,7 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
       } catch(error) { db.exec('ROLLBACK'); throw error; }
     } catch(error) { db.close(); throw error; }
   }
+  const cfl = installCflSync({db,readState,writeState,audit,baseUrl:cflBaseUrl,token:cflToken,fetchImpl:cflFetch,intervalMs:cflIntervalMs});
   const server = createServer(async (req,res) => {
     res.setHeader('X-Content-Type-Options','nosniff'); res.setHeader('X-Frame-Options','DENY'); res.setHeader('Referrer-Policy','same-origin');
     if (production) {
@@ -185,6 +187,12 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
           return reply(res,200,{user:publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(user.id))});
         }
         if (user.mustChangePassword) throw failure(403,'Change your temporary password before continuing.');
+        if (path === '/api/integrations/cfl') {
+          if (!isAdmin(user)) throw failure(403,'Only the Main Admin can manage the CFL connection.');
+          if (method === 'GET') return reply(res,200,cfl.status());
+          if (method === 'POST') return reply(res,200,await cfl.sync());
+          if (method === 'PUT') { const input=await body(req);return reply(res,200,cfl.map(input.workshopId,input.pawBatchId)); }
+        }
         if (path === '/api/question-bank' && method === 'PUT') {
           if (!isAdmin(user)) throw failure(403,'Only the Main Admin can edit the question bank.');
           const input=await body(req);const bank=readBank();
@@ -310,7 +318,8 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
     }
   });
   server.requestTimeout=15000; server.headersTimeout=10000;
-  server.on('close',()=>db.close());
+  server.on('close',()=>{void cfl.close().finally(()=>db.close());});
+  server.once('listening',()=>cfl.start());
   return server;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

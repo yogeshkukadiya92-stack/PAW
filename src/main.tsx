@@ -1,4 +1,5 @@
 import React from 'react';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import ReactDOM from 'react-dom/client';
 import App from './AuthApp';
 import { QuestionBankProvider } from './lib/question-bank';
@@ -8,6 +9,6 @@ import './dashboard.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <QuestionBankProvider><App /></QuestionBankProvider>
+    <AppErrorBoundary><QuestionBankProvider><App /></QuestionBankProvider></AppErrorBoundary>
   </React.StrictMode>
 );

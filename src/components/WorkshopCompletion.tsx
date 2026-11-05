@@ -1,3 +1,4 @@
+import { accessFor } from '../../shared/access.mjs';
 import { useState } from 'react';
 import type { Participant, PAWBatch, CompletionEvent } from '@/types/paw';
 import { type LoginUser, canManage } from '@/lib/api';
@@ -23,7 +24,7 @@ function CompletionCard({p,readiness:r,user,onUpdate}:{p:Participant;readiness:R
   const [note,setNote]=useState('');const completed=p.completionEvents?.slice(-1)[0]?.action==='Completed';
   const act=(action:CompletionEvent['action'])=>{const event:CompletionEvent={id:crypto.randomUUID(),action,note:note.trim(),at:new Date().toISOString(),by:user.name};onUpdate(p.id,current=>({...current,completionEvents:[...(current.completionEvents||[]),event]}));setNote('');};
   return <article className="workshop-assignment-card"><div className="profile-question-heading"><h3>{p.fullName} · {p.loginId}</h3><span className={r.status==='Completed'?'profile-done':'profile-pending'}>{r.status}</span></div><p className="workshop-note">{r.approved}/{r.taskTotal} tasks approved · {r.present}/{r.sessionTotal} sessions present</p>{r.blockers.length>0&&<ul className="workshop-blockers">{r.blockers.map(reason=><li key={reason}>{reason}</li>)}</ul>}
-    {canManage(user)&&(r.ready&&!completed||completed)&&<form className="workshop-form" onSubmit={e=>{e.preventDefault();act(completed?'Reopened':'Completed');}}><label>{completed?'Reason for reopening':'Completion review note'}<textarea required maxLength={4000} value={note} onChange={e=>setNote(e.target.value)}/></label><button className="profile-button primary" disabled={!note.trim()}>{completed?'Reopen participant':'Mark workshop completed'}</button></form>}
+    {canManage(user)&&accessFor(user).includes('completion')&&(r.ready&&!completed||completed)&&<form className="workshop-form" onSubmit={e=>{e.preventDefault();act(completed?'Reopened':'Completed');}}><label>{completed?'Reason for reopening':'Completion review note'}<textarea required maxLength={4000} value={note} onChange={e=>setNote(e.target.value)}/></label><button className="profile-button primary" disabled={!note.trim()}>{completed?'Reopen participant':'Mark workshop completed'}</button></form>}
     {!!p.completionEvents?.length&&<details><summary>Completion decision history</summary>{p.completionEvents.map(e=><div key={e.id} className="workshop-log"><strong>{e.action} · {e.by} · {displayDate(e.at)}</strong><p>{e.note}</p></div>)}</details>}
   </article>;
 }

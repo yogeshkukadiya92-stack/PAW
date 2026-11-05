@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import App from './App';
 import { api, type LoginUser, type Snapshot } from '@/lib/api';
 import { LoginScreen } from '@/components/LoginScreen';
-import { AssessmentExperience } from '@/components/AssessmentExperience';
 import { ProfileHeader } from '@/components/ProfileHeader';
 import type { AssessmentLanguage } from '@/lib/assessment-i18n';
 import { PasswordForm } from '@/components/PasswordForm';
@@ -23,10 +22,10 @@ export default function AuthApp() {
   useEffect(()=>{void load();const expired=()=>{setSnapshot(null);setStatus(old=>old?{...old,user:null}:null);};window.addEventListener('paw-session-expired',expired);return()=>window.removeEventListener('paw-session-expired',expired);},[load]);
   const logout=async()=>{await api('/auth/logout','POST',{});setSnapshot(null);setStatus({setupRequired:false,setupKeyRequired:false,user:null});changeScreen('sign-in');};
   if(loading)return <main className="min-h-screen flex items-center justify-center text-slate-600" role="status">Opening PAW…</main>;
-  if(error)return <main className="min-h-screen flex items-center justify-center p-4"><div className="sober-card rounded-2xl p-6 max-w-md space-y-4"><h1 className="text-xl font-bold">Unable to connect</h1><p role="alert" className="text-sm text-slate-600">{error}</p><button className="auth-primary" onClick={()=>void load()}>Try again</button></div></main>;
+  if(error)return <main className="min-h-screen flex items-center justify-center p-4"><div className="sober-card rounded-2xl p-6 max-w-md space-y-4"><h1 className="text-xl font-bold">Unable to connect</h1><p role="alert" className="text-sm text-slate-600">{error}</p><button className="auth-primary" onClick={()=>void load()}>Try again</button>{status?.user&&<button className="auth-secondary" onClick={()=>void logout().catch(e=>setError(e.message))}>Sign out</button>}</div></main>;
   if(!status)return null;
   if(!status.user){
-    return <div className="profile-app"><ProfileHeader language={language} onLanguage={setLanguage} onHome={()=>changeScreen('sign-in')}/><LoginScreen key={screen} mode={screen==='setup'?'setup':'sign-in'} onMode={changeScreen} setupRequired={status.setupRequired} setupKeyRequired={status.setupKeyRequired} onSignedIn={signedIn}/></div>;
+    return <div className="profile-app"><ProfileHeader showLanguage={false} language={language} onLanguage={setLanguage} onHome={()=>changeScreen('sign-in')}/><LoginScreen key={screen} mode={screen==='setup'?'setup':'sign-in'} onMode={changeScreen} setupRequired={status.setupRequired} setupKeyRequired={status.setupKeyRequired} onSignedIn={signedIn}/></div>;
   }
   if(status.user.role==='PARTICIPANT')return <main className="profile-app profile-login-page"><h1>Staff access only</h1><p>This dashboard is for administrators, sales and operations teams. Contact your workshop team for your participant registration link.</p><button className="profile-button primary" onClick={()=>void logout()}>Back to staff sign in</button></main>;
   if(status.user.mustChangePassword)return <main className="min-h-screen flex items-center justify-center p-4"><div className="sober-card rounded-2xl p-6 sm:p-8 w-full max-w-md"><p className="text-sm text-slate-500 mb-5">Signed in as {status.user.name}</p><PasswordForm user={status.user} onChanged={user=>void signedIn(user).catch(e=>setError(e.message))}/><button className="text-sm text-slate-600 underline mt-5" onClick={()=>void logout().catch(e=>setError(e.message))}>Sign out</button></div></main>;

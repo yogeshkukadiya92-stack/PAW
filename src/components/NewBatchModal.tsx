@@ -4,6 +4,7 @@ import { X, Calendar, MapPin, Video, Users, CheckSquare, Plus } from 'lucide-rea
 import { PAWBatch, ICLMember, WorkshopType } from '@/types/paw';
 
 interface NewBatchModalProps {
+  existing?: PAWBatch;
   isOpen: boolean;
   onClose: () => void;
   availableMembers: ICLMember[];
@@ -12,25 +13,29 @@ interface NewBatchModalProps {
 
 const NewBatchModalContent: React.FC<NewBatchModalProps> = ({
   isOpen,
+  existing,
   onClose,
   availableMembers,
   onBatchCreated,
 }) => {
   const dialogRef = useDialog(onClose);
   const [error, setError] = useState('');
-  const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [type, setType] = useState<WorkshopType>('Offline');
-  const [venueOrLink, setVenueOrLink] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [targetRegistrations, setTargetRegistrations] = useState(100);
-  const [pawHeadId, setPawHeadId] = useState(availableMembers.find(m => m.role === 'PAW_HEAD')?.id || '');
+  const [name, setName] = useState(existing?.name||'');
+  const [code, setCode] = useState(existing?.code||'');
+  const [type, setType] = useState<WorkshopType>(existing?.type||'Offline');
+  const [venueOrLink, setVenueOrLink] = useState(existing?.venueOrLink||'');
+  const [startDate, setStartDate] = useState(existing?.startDate||'');
+  const [endDate, setEndDate] = useState(existing?.endDate||'');
+  const [targetRegistrations, setTargetRegistrations] = useState(existing?.totalTargetRegistrations??100);
+  const [pawHeadId, setPawHeadId] = useState(existing?.pawHeadId||availableMembers.find(m => m.role === 'PAW_HEAD')?.id || '');
   
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const form=new FormData(e.currentTarget as HTMLFormElement);
+    const startDate=String(form.get('startDate')||'');
+    const endDate=String(form.get('endDate')||'');
     if (!name.trim() || !startDate || !endDate) { setError('Enter a batch name and both workshop dates.'); return; }
     if (endDate < startDate) { setError('End date must be on or after the start date.'); return; }
 
@@ -41,7 +46,8 @@ const NewBatchModalContent: React.FC<NewBatchModalProps> = ({
     const welcomeStartStr = welcomeDate.toISOString().split('T')[0];
 
     const newBatch: PAWBatch = {
-      id: `batch-${crypto.randomUUID()}`,
+      ...existing,
+      id: existing?.id||`batch-${crypto.randomUUID()}`,
       name: name.trim(),
       code: code || `PAW-${type.toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`,
       type,
@@ -50,9 +56,9 @@ const NewBatchModalContent: React.FC<NewBatchModalProps> = ({
       endDate,
       welcomeStartDate: welcomeStartStr,
       pawHeadId,
-      status: 'Calling',
+      status: existing?.status||'Calling',
       totalTargetRegistrations: Number(targetRegistrations),
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: existing?.createdAt||new Date().toISOString().split('T')[0],
     };
 
     onBatchCreated(newBatch);
@@ -65,7 +71,7 @@ const NewBatchModalContent: React.FC<NewBatchModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Create New PAW</h2>
+            <h2 className="text-base font-bold text-slate-900">{existing?'Edit workshop':'Create New PAW'}</h2>
             <p className="text-xs text-slate-500">PAW Creation, Dates, Head Assignment & Team Roster</p>
           </div>
           <button
@@ -164,6 +170,7 @@ const NewBatchModalContent: React.FC<NewBatchModalProps> = ({
               </label>
               <input
                 type="date"
+                name="startDate"
                 required
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
@@ -176,6 +183,7 @@ const NewBatchModalContent: React.FC<NewBatchModalProps> = ({
               </label>
               <input
                 type="date"
+                name="endDate"
                 required
                 min={startDate}
                 value={endDate}
@@ -230,7 +238,7 @@ const NewBatchModalContent: React.FC<NewBatchModalProps> = ({
               type="submit"
               className="px-5 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition"
             >
-              Create Batch
+              {existing?'Save workshop':'Create Batch'}
             </button>
           </div>
         </form>

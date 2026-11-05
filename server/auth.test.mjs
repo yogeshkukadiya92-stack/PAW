@@ -327,3 +327,17 @@ test('environment admin credentials bootstrap once and never overwrite an existi
   await assert.rejects(createApp({dbPath:':memory:',adminEmail:'owner@example.com',adminPassword:''}),/Set both/);
   await assert.rejects(createApp({dbPath:':memory:',adminEmail:'invalid',adminPassword:'abcde'}),/valid email/);
 });
+
+test('staff can record participant submissions with server attribution, while review history stays immutable',async()=>{
+ const env=await environment();try{
+  const {admin,login}=await fixture(env);const {client:leader}=await login('LEADER','leader-1');
+  let s=(await admin.request('/api/state')).body;let p=s.data.participants[0];
+  const task={id:'staff-task',title:'Reflection',instructions:'Record the received response',dueDate:'2026-11-06',history:[]};
+  let result=await patch(admin,s,{participants:{upsert:[{...p,assignments:[task]}],remove:[]}});assert.equal(result.status,200);
+  s=(await leader.request('/api/state')).body;p=s.data.participants.find(x=>x.id===p.id);
+  const event={id:'staff-recorded',action:'Submitted',answer:'Participant supplied response',link:'',note:'',at:'2000-01-01',by:'forged'};
+  result=await patch(leader,s,{participants:{upsert:[{...p,assignments:[{...task,history:[event]}]}],remove:[]}});assert.equal(result.status,200,result.body.error);
+  p=result.body.data.participants.find(x=>x.id===p.id);assert.equal(p.assignments[0].history[0].by,'leader-1');
+  assert.equal((await patch(leader,result.body,{participants:{upsert:[{...p,assignments:[{...task,history:[{...event,answer:'Rewrite'}]}]}],remove:[]}})).status,403);
+ }finally{await env.close();}
+});

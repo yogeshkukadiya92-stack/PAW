@@ -113,9 +113,10 @@ export function validateState(state) {
     }
   }
   for (const b of state.batches) {
-    for (const key of ['name', 'code', 'startDate', 'endDate', 'welcomeStartDate']) string(b, key);
+    const unscheduledCfl = Boolean(b.cflWorkshopId) && b.status === 'Draft' && b.startDate === '' && b.endDate === '' && b.welcomeStartDate === '';
+    for (const key of unscheduledCfl ? ['name','code'] : ['name', 'code', 'startDate', 'endDate', 'welcomeStartDate']) string(b, key);
     if (!['Online','Offline'].includes(b.type) || !['Draft','Calling','Welcome','Active','Completed'].includes(b.status) ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(b.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(b.endDate) || b.endDate < b.startDate ||
+      (!unscheduledCfl && (!/^\d{4}-\d{2}-\d{2}$/.test(b.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(b.endDate))) || b.endDate < b.startDate ||
       !Number.isInteger(b.totalTargetRegistrations) || b.totalTargetRegistrations < 1 || b.totalTargetRegistrations > 5000) throw failure(400, 'Invalid batch details.');
     for (const key of ['venueOrLink','pawHeadId','createdAt']) if (typeof b[key] !== 'string') throw failure(400, `Invalid batch ${key}.`);
     if (b.pawHeadId && !state.members.some(m => m.id === b.pawHeadId && m.role === 'PAW_HEAD')) throw failure(400, 'Choose an existing PAW Head.');

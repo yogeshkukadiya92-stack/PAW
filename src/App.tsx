@@ -1,11 +1,12 @@
 import { accessFor, checkAccessChange } from '../shared/access.mjs';
+import { CflConnection } from '@/components/CflConnection';
 import { LayoutDashboard, ClipboardCheck, CalendarDays, Award, HeartHandshake, FileChartColumn, Users, BookOpen, Settings2 } from 'lucide-react';
 import { WorkshopMaintenance } from '@/components/WorkshopMaintenance';
 import { WorkshopCompletion } from '@/components/WorkshopCompletion';
 import { WorkshopReminders } from '@/components/WorkshopReminders';
 import { WorkshopAssignments } from '@/components/WorkshopAssignments';
 import { WorkshopSessions } from '@/components/WorkshopSessions';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { 
   PAWBatch, 
@@ -16,7 +17,6 @@ import {
   CallStatus, 
   WelcomeChecklist 
 } from '@/types/paw';
-import { loadStoredBatches, loadStoredMembers, loadStoredLeads, loadStoredParticipants } from '@/lib/storage';
 import { type LoginUser, type Snapshot, type WorkspaceData, canManage } from '@/lib/api';
 import { useWorkspace } from '@/lib/use-workspace';
 import { AccountToolbar } from '@/components/AccountToolbar';
@@ -45,14 +45,19 @@ interface AppProps { user: LoginUser; initialState: Snapshot; onLogout: () => Pr
 export default function App({ user, initialState, onLogout, onUserChange }: AppProps) {
   const { data, setData, saveStatus, saveError, retry, reload } = useWorkspace(initialState);
   const { batches, members, leads, participants } = data;
+  const dataRef = useRef(data);
+  dataRef.current = data;
   const updateCollection = <K extends keyof WorkspaceData>(key: K, update: React.SetStateAction<WorkspaceData[K]>) => {
-    const next = typeof update === 'function' ? (update as (value: WorkspaceData[K]) => WorkspaceData[K])(data[key]) : update;
+    const next = typeof update === 'function' ? (update as (value: WorkspaceData[K]) => WorkspaceData[K])(dataRef.current[key]) : update;
     for (const row of next) {
-      const before=data[key].find(item=>item.id===row.id);
+      const before=dataRef.current[key].find(item=>item.id===row.id);
+      if(JSON.stringify(before)===JSON.stringify(row))continue;
       const denied=checkAccessChange(key,before,row,user);
       if(denied){showToast(denied);return;}
     }
-    setData(prev => ({...prev,[key]:next}));
+    const updated={...dataRef.current,[key]:next};
+    dataRef.current=updated;
+    setData(updated);
   };
   const setBatches = (value: React.SetStateAction<PAWBatch[]>) => updateCollection('batches', value);
   const setMembers = (value: React.SetStateAction<ICLMember[]>) => updateCollection('members', value);
@@ -67,26 +72,16 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
     || batches[0];
   const setSelectedBatch = (batch: PAWBatch) => setSelectedBatchId(batch.id);
   const [currentRole, setCurrentRole] = useState<UserRole | 'PARTICIPANT_VIEW'>(user.role === 'PARTICIPANT' ? 'PARTICIPANT_VIEW' : canManage(user) ? 'PAW_HEAD' : user.role);
-  const [dashboardTab,setDashboardTab]=useState<DashboardTab | 'progress' | 'assignments' | 'sessions' | 'completion' | 'maintenance'>('progress');
+  type Section = DashboardTab | 'progress' | 'assignments' | 'sessions' | 'completion' | 'maintenance';
+  const readSection=():Section=>{const value=window.location.hash.replace('#','');return ['progress','assignments','sessions','completion','maintenance','reports','participants','operations',...(user.role==='PAW_HEAD'?['questions']:[])].includes(value)?value as Section:'progress';};
+  const [dashboardTab,changeTab]=useState<Section>(readSection);
+  const setDashboardTab=(tab:Section)=>{changeTab(tab);if(window.location.hash!==`#${tab}`)window.location.hash=tab;};
+  useEffect(()=>{if(['','#sign-in','#setup'].includes(window.location.hash))window.history.replaceState(null,'','#progress');const changed=()=>changeTab(readSection());window.addEventListener('hashchange',changed);return()=>window.removeEventListener('hashchange',changed);},[user.role]);
   const [progressBatchId, setProgressBatchId] = useState('ALL');
   const [profileLanguage,setProfileLanguage]=useState<AssessmentLanguage>('en');
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
-  const [legacyData] = useState<WorkspaceData | null>(() => user.role === 'PAW_HEAD' ? {batches:loadStoredBatches(), members:loadStoredMembers(), leads:loadStoredLeads(), participants:loadStoredParticipants()} : null);
-  const hasLegacy = legacyData && (['batches','members','leads','participants'] as const).some(key => legacyData[key].some(row => !data[key].some(current => current.id === row.id)));
-  const importLegacy = () => {
-    if (!legacyData) return;
-    setData(prev => {
-      const merged = {...prev};
-      for (const key of ['batches','members','leads','participants'] as const) {
-        (merged[key] as unknown[]) = [...prev[key], ...legacyData[key].filter(row => !prev[key].some(item => item.id === row.id))];
-      }
-      merged.participants = merged.participants.map(p => ['Submitted','Report_Generated'].includes(p.firstAssignmentStatus) && Object.keys(p.assessmentAnswers || {}).length < 40 ? {...p,firstAssignmentStatus:'In_Progress'} : p);
-      return merged;
-    });
-    showToast('Importing your saved browser records into the shared workspace.');
-  };
-
   // Modal States
+  const [editingBatch,setEditingBatch]=useState<PAWBatch|undefined>();
   const [isNewBatchOpen, setIsNewBatchOpen] = useState(false);
   const [isManageTeamOpen, setIsManageTeamOpen] = useState(false);
   const [selectedLeadForLog, setSelectedLeadForLog] = useState<CallingLead | null>(null);
@@ -140,9 +135,9 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
 
   // 1. Batch Created Handler
   const handleBatchCreated = (newBatch: PAWBatch) => {
-    setBatches([newBatch, ...batches]);
+    setBatches(prev=>prev.some(b=>b.id===newBatch.id)?prev.map(b=>b.id===newBatch.id?newBatch:b):[newBatch,...prev]);
     setSelectedBatch(newBatch);
-    showToast(`Created new PAW Batch: ${newBatch.name} (${newBatch.type})`);
+    showToast(`Saved PAW workshop: ${newBatch.name} (${newBatch.type})`);
   };
 
   // 2. Add New Lead Handler
@@ -464,7 +459,7 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
   const toolbar = <AccountToolbar user={user} onAccounts={() => setIsAccountsOpen(true)} onLogout={() => {
     if (saveStatus !== 'saved') { showToast('Wait for your changes to save before signing out.'); return; }
     void onLogout().catch(error => showToast(error.message));
-  }} saveStatus={saveStatus} onImport={hasLegacy ? importLegacy : undefined} />;
+  }} saveStatus={saveStatus} />;
   const accountsModal = <AccountsModal isOpen={isAccountsOpen} onClose={() => setIsAccountsOpen(false)} user={user} data={data} onUserChange={onUserChange} />;
   const feedback = <>
     {toastMessage && <div role="status" className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-5 z-[60] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-sm">{toastMessage}</div>}
@@ -490,13 +485,14 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
 
   return (
     <div className="profile-app profile-dashboard-shell flex flex-col">
-      <ProfileHeader language={profileLanguage} onLanguage={setProfileLanguage} onHome={()=>setDashboardTab('progress')}/>{toolbar}{feedback}{accountsModal}
+      <ProfileHeader showLanguage={false} language={profileLanguage} onLanguage={setProfileLanguage} onHome={()=>setDashboardTab('progress')}/>{toolbar}{feedback}{accountsModal}
 
       {/* Main Content Area */}
       <main className="profile-container w-full flex-1">
         {user.role!=='PAW_HEAD'&&accessFor(user).length===1&&<p className="profile-saved">Read-only access. Contact your administrator to change permissions.</p>}
         <div className="profile-dashboard-heading"><h1>{roleLabels[user.role]} dashboard</h1><p className="profile-muted">Track workshop progress, assignments and attendance according to your assigned position.</p></div>
         <nav className="profile-dashboard-tabs no-print" aria-label="Dashboard sections" role="tablist">{([['progress','Workshop progress'],['assignments','Assignments'],['sessions','Sessions & attendance'],['completion','Completion'],['maintenance','30 / 60 / 90-day follow-ups'],['reports','Test reports'],['participants','Participants'],...(user.role==='PAW_HEAD'?[['questions','Question bank']]:[]),['operations','Workshop operations']] as [DashboardTab | 'progress' | 'assignments' | 'sessions' | 'completion' | 'maintenance',string][]).map(([key,label])=><button role="tab" key={key} aria-selected={dashboardTab===key} onClick={()=>setDashboardTab(key)}>{React.createElement(({progress:LayoutDashboard,assignments:ClipboardCheck,sessions:CalendarDays,completion:Award,maintenance:HeartHandshake,reports:FileChartColumn,participants:Users,questions:BookOpen,operations:Settings2})[key],{size:18,'aria-hidden':true})}<span>{label}</span>{key==='reports'&&<small>{participants.reduce((total,p)=>total+participantReports(p).length,0)}</small>}{key==='participants'&&<small>{participants.length}</small>}</button>)}</nav>
+      {user.role==='PAW_HEAD'&&dashboardTab==='progress'&&<CflConnection batches={batches}/>}
       <WorkshopReminders participants={participants} batches={batches} user={user} onOpen={r=>{setSelectedBatchId(r.batchId);setDashboardTab(r.section);if(r.section==='progress')setProgressBatchId(r.batchId);}}/>
       {/* Header */}
       {dashboardTab==='operations' && selectedBatch && <Header
@@ -507,6 +503,7 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
         selectedBatch={selectedBatch}
         onSelectBatch={setSelectedBatch}
         onOpenNewBatchModal={() => setIsNewBatchOpen(true)}
+        onEditBatch={user.role==='PAW_HEAD'?()=>{setEditingBatch(selectedBatch);setIsNewBatchOpen(true);}:undefined}
         onOpenManageTeamModal={user.role === 'PAW_HEAD' ? () => setIsManageTeamOpen(true) : undefined}
         currentRole={currentRole}
         onRoleChange={setCurrentRole}
@@ -520,7 +517,7 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
         onOpenEscalations={() => setIsEscalationsOpen(true)}
       />}
 
-        {dashboardTab==='assignments'||dashboardTab==='sessions'||dashboardTab==='completion'||dashboardTab==='maintenance'?<div className="workshop-progress"><section className="profile-panel"><label>Workshop<select value={selectedBatch?.id||''} onChange={e=>setSelectedBatchId(e.target.value)}>{batches.map(b=><option key={b.id} value={b.id}>{b.name} · {b.code}</option>)}</select></label></section>{selectedBatch?dashboardTab==='maintenance'?<WorkshopMaintenance key={selectedBatch.id} participants={batchParticipants} batch={selectedBatch} members={members} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:dashboardTab==='completion'?<WorkshopCompletion key={selectedBatch.id} participants={batchParticipants} batches={batches} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:dashboardTab==='assignments'?<WorkshopAssignments key={selectedBatch.id} participants={batchParticipants} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:<WorkshopSessions key={selectedBatch.id} batch={selectedBatch} participants={batchParticipants} user={user} onBatch={batch=>setBatches(prev=>prev.map(b=>b.id===batch.id?batch:b))} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:<p className="profile-empty">Create a workshop from Workshop progress to get started.</p>}</div>:dashboardTab==='progress'?<WorkshopProgress user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))} onNavigate={(batchId,section)=>{setSelectedBatchId(batchId);setDashboardTab(section);}} batches={batches} participants={participants} members={members} leads={leads} selectedId={batches.some(b=>b.id===progressBatchId)?progressBatchId:'ALL'} onSelect={id=>{setProgressBatchId(id);if(id!=='ALL')setSelectedBatchId(id);}} onOperations={()=>setDashboardTab('operations')} onCreate={user.role==='PAW_HEAD'?()=>setIsNewBatchOpen(true):undefined}/>:dashboardTab!=='operations'?<AssessmentDashboard user={user} members={members} participants={participants} tab={dashboardTab} onAssessment={p=>{setSelectedParticipantForAssessment(p);setIsAssessmentOpen(true);}} onChangeMember={(id,parentId)=>setMembers(previous=>previous.map(m=>m.id===id?{...m,parentLeaderId:parentId||undefined}:m))} onAssignParticipant={(id,memberId)=>setParticipants(previous=>previous.map(p=>p.id===id?{...p,assignedWelcomeIclMemberId:memberId}:p))}/>:!selectedBatch?<section className="profile-panel profile-workshop-empty"><h2>{user.role==='PAW_HEAD'?'Create your first workshop':'No workshop assigned yet'}</h2><p className="profile-muted">Reports and the question bank are ready. Add a workshop to manage calling, registrations and follow-ups.</p>{user.role==='PAW_HEAD'?<div className="flex flex-wrap gap-3 mt-5"><button className="profile-button primary" onClick={()=>setIsNewBatchOpen(true)}>Create workshop</button><button className="profile-button" onClick={()=>setIsManageTeamOpen(true)}>Manage team</button></div>:<p className="profile-muted mt-4">Ask your PAW Head to assign your workshop and records.</p>}</section>:<>
+        {dashboardTab==='assignments'||dashboardTab==='sessions'||dashboardTab==='completion'||dashboardTab==='maintenance'?<div className="workshop-progress"><section className="profile-panel"><label>Workshop<select disabled={!batches.length} value={selectedBatch?.id||''} onChange={e=>setSelectedBatchId(e.target.value)}>{batches.map(b=><option key={b.id} value={b.id}>{b.name} · {b.code}</option>)}</select></label></section>{selectedBatch?dashboardTab==='maintenance'?<WorkshopMaintenance key={selectedBatch.id} participants={batchParticipants} batch={selectedBatch} members={members} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:dashboardTab==='completion'?<WorkshopCompletion key={selectedBatch.id} participants={batchParticipants} batches={batches} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:dashboardTab==='assignments'?<WorkshopAssignments key={selectedBatch.id} participants={batchParticipants} user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:<WorkshopSessions key={selectedBatch.id} batch={selectedBatch} participants={batchParticipants} user={user} onBatch={batch=>setBatches(prev=>prev.map(b=>b.id===batch.id?batch:b))} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))}/>:<section className="profile-panel profile-empty"><h2>{user.role==='PAW_HEAD'?'Create your first workshop':'No workshop assigned yet'}</h2><p>Assignments, sessions and follow-ups will appear here.</p>{user.role==='PAW_HEAD'&&<button className="profile-button primary" onClick={()=>setIsNewBatchOpen(true)}>Create workshop</button>}</section>}</div>:dashboardTab==='progress'?<WorkshopProgress user={user} onUpdate={(id,update)=>setParticipants(prev=>prev.map(p=>p.id===id?update(p):p))} onNavigate={(batchId,section)=>{setSelectedBatchId(batchId);setDashboardTab(section);}} batches={batches} participants={participants} members={members} leads={leads} selectedId={batches.some(b=>b.id===progressBatchId)?progressBatchId:'ALL'} onSelect={id=>{setProgressBatchId(id);if(id!=='ALL')setSelectedBatchId(id);}} onOperations={()=>setDashboardTab('operations')} onCreate={user.role==='PAW_HEAD'?()=>setIsNewBatchOpen(true):undefined}/>:dashboardTab!=='operations'?<AssessmentDashboard key={dashboardTab} user={user} members={members} participants={participants} tab={dashboardTab} onAssessment={p=>{setSelectedParticipantForAssessment(p);setIsAssessmentOpen(true);}} onChangeMember={(id,parentId)=>setMembers(previous=>previous.map(m=>m.id===id?{...m,parentLeaderId:parentId||undefined}:m))} onAssignParticipant={(id,memberId)=>setParticipants(previous=>previous.map(p=>p.id===id?{...p,assignedWelcomeIclMemberId:memberId}:p))}/>:!selectedBatch?<section className="profile-panel profile-workshop-empty"><h2>{user.role==='PAW_HEAD'?'Create your first workshop':'No workshop assigned yet'}</h2><p className="profile-muted">Reports and the question bank are ready. Add a workshop to manage calling, registrations and follow-ups.</p>{user.role==='PAW_HEAD'?<div className="flex flex-wrap gap-3 mt-5"><button className="profile-button primary" onClick={()=>setIsNewBatchOpen(true)}>Create workshop</button><button className="profile-button" onClick={()=>setIsManageTeamOpen(true)}>Manage team</button></div>:<p className="profile-muted mt-4">Ask your PAW Head to assign your workshop and records.</p>}</section>:<>
         {/* View Switcher based on currentRole */}
         {currentRole === 'PARTICIPANT_VIEW' ? (
           <ParticipantLivePortal key={selectedBatch.id}
@@ -539,7 +536,7 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
             {/* Mission Calling View (Active for PAW_HEAD and CALLING_MEMBER) */}
             {(currentRole === 'PAW_HEAD' || currentRole === 'CALLING_MEMBER' || currentRole === 'LEADER') && (
               <section>
-                <MissionCallingView key={selectedBatch.id}
+                <MissionCallingView editable={accessFor(user).includes('calling')} key={selectedBatch.id}
                   batch={selectedBatch}
                   callingMembers={callingMembers}
                   leads={batchLeads}
@@ -557,7 +554,7 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
             {/* Welcome & Follow-up View (Active for PAW_HEAD and WELCOME_MEMBER) */}
             {(currentRole === 'PAW_HEAD' || currentRole === 'WELCOME_MEMBER') && (
               <section className="pt-4">
-                <WelcomeFollowupView key={selectedBatch.id}
+                <WelcomeFollowupView permissions={accessFor(user)} key={selectedBatch.id}
                   batch={selectedBatch}
                   welcomeMembers={welcomeMembers}
                   participants={batchParticipants}
@@ -594,7 +591,8 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
       {/* 1. New PAW Batch Modal */}
       {user.role === 'PAW_HEAD' && <NewBatchModal
         isOpen={isNewBatchOpen}
-        onClose={() => setIsNewBatchOpen(false)}
+        existing={editingBatch}
+        onClose={() => {setIsNewBatchOpen(false);setEditingBatch(undefined);}}
         availableMembers={members}
         onBatchCreated={handleBatchCreated}
       />}

@@ -14,6 +14,7 @@ export type CallingCapacity = 15 | 25 | 35;
 export type PreferredLanguage = 'en' | 'gu' | 'hi' | 'mr';
 
 export interface PAWBatch {
+  cflWorkshopId?: string;
   sessions?: WorkshopSession[];
   id: string;
   name: string;
@@ -101,6 +102,11 @@ export interface DailyFollowupLog {
 }
 
 export interface Participant {
+  cflWorkshopId?: string;
+  cflRegistrationId?: string;
+  cflRegistrationIds?: string[];
+  cflRegistrationNumber?: string;
+  cflRegistrationStatus?: string;
   maintenanceEvents?: MaintenanceEvent[];
   completionEvents?: CompletionEvent[];
   interventionEvents?: InterventionEvent[];

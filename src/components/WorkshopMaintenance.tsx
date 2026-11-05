@@ -1,3 +1,4 @@
+import { accessFor } from '../../shared/access.mjs';
 import { useState } from 'react';
 import type { Participant, PAWBatch, ICLMember, MaintenanceEvent } from '@/types/paw';
 import type { LoginUser } from '@/lib/api';
@@ -22,7 +23,7 @@ export function WorkshopMaintenance({participants,batch,members,user,onUpdate}:P
 }
 function MaintenanceCard({canRecord,participant:p,milestone:m,user,owner,onUpdate}:{canRecord:boolean;participant:Participant;milestone:ReturnType<typeof maintenanceSchedule>[number];user:LoginUser;owner?:string;onUpdate:Props['onUpdate']}) {
   const [editing,setEditing]=useState(false),[outcome,setOutcome]=useState<MaintenanceEvent['outcome']>('Completed'),[note,setNote]=useState(''),[date,setDate]=useState('');
-  const editable=canRecord&&['PAW_HEAD','LEADER_HEAD','LEADER','WELCOME_MEMBER'].includes(user.role);
+  const editable=accessFor(user).includes('followups')&&canRecord&&['PAW_HEAD','LEADER_HEAD','LEADER','WELCOME_MEMBER'].includes(user.role);
   return <article className="workshop-assignment-card"><div className="profile-question-heading"><h3>{p.fullName} · Day {m.day}</h3><span className={m.done?'profile-done':'profile-pending'}>{m.status}</span></div><p className="workshop-note">{owner||(user.role==='PARTICIPANT'?'Your workshop team':'ICL member unassigned')} · Original due {displayDate(m.originalDue)}{!m.done?` · Next due ${displayDate(m.due)}`:''}</p>
     {m.last&&<p className="workshop-instructions">{m.last.outcome.replace(/_/g,' ')} · {m.last.note}</p>}
     {editable&&!editing&&<button className="profile-button" onClick={()=>setEditing(true)}>Record follow-up</button>}

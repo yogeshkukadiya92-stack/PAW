@@ -1,3 +1,4 @@
+import { whatsappPhone } from '../../shared/phone.mjs';
 import { useDialog } from '@/lib/use-dialog';
 import React, { useState } from 'react';
 import { X, PhoneCall, Clock, CheckCircle2, MessageSquare, PhoneOff, Calendar } from 'lucide-react';
@@ -64,7 +65,7 @@ const CallLogModalContent: React.FC<CallLogModalProps> = ({
               <span>Dial Phone</span>
             </a>
             <a
-              href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+              href={`https://wa.me/${whatsappPhone(lead.phone)}?text=${encodeURIComponent(
                 `Hello ${lead.fullName}, this is regarding your inquiry for the Personality Awareness Workshop (PAW). Please let us know if you have any questions.`
               )}`}
               target="_blank"

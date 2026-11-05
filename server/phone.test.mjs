@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {whatsappPhone} from '../shared/phone.mjs';
+test('WhatsApp links normalize Indian local numbers while preserving international prefixes',()=>{assert.equal(whatsappPhone('98765 43210'),'919876543210');assert.equal(whatsappPhone('+91 98765 43210'),'919876543210');assert.equal(whatsappPhone('09876543210'),'919876543210');assert.equal(whatsappPhone('+44 7700 900123'),'447700900123');assert.equal(whatsappPhone('0044 7700 900123'),'447700900123');});

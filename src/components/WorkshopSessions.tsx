@@ -1,10 +1,11 @@
+import { accessFor } from '../../shared/access.mjs';
 import { useState } from 'react';
 import type { PAWBatch, Participant, SessionAttendance } from '@/types/paw';
 import { type LoginUser, canManage } from '@/lib/api';
 
 export function WorkshopSessions({batch,participants,user,onBatch,onUpdate}:{batch:PAWBatch;participants:Participant[];user:LoginUser;onBatch:(batch:PAWBatch)=>void;onUpdate:(id:string,update:(p:Participant)=>Participant)=>void}) {
   const [title,setTitle]=useState(''),[startsAt,setStartsAt]=useState(''),[link,setLink]=useState('');
-  const editable=canManage(user)||user.role==='WELCOME_MEMBER';
+  const editable=(canManage(user)||user.role==='WELCOME_MEMBER')&&accessFor(user).includes('attendance');
   return <section className="profile-panel"><h2>Sessions & attendance</h2><p className="profile-muted">Scheduled workshop sessions. Attendance is recorded by your assigned team.</p>
     {user.role==='PAW_HEAD'&&<form className="workshop-form" onSubmit={e=>{e.preventDefault();const sessionTime=String(new FormData(e.currentTarget as HTMLFormElement).get('startsAt')||'');if(!title.trim()||!Number.isFinite(Date.parse(sessionTime)))return;onBatch({...batch,sessions:[...(batch.sessions||[]),{id:crypto.randomUUID(),title:title.trim(),startsAt:new Date(sessionTime).toISOString(),link:link.trim()}]});setTitle('');setStartsAt('');setLink('');}}><h3>Add session</h3><label>Session name<input required maxLength={200} value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Date and time (your local time)<input required name="startsAt" type="datetime-local" value={startsAt} onChange={e=>setStartsAt(e.target.value)}/></label><label>Joining link (optional)<input type="url" pattern="https?://.*" maxLength={2000} value={link} onChange={e=>setLink(e.target.value)}/></label><button className="profile-button primary">Add session</button></form>}
     {!(batch.sessions||[]).length&&<p className="profile-empty">No scheduled sessions yet. Existing Day 1–3 attendance remains in Workshop operations.</p>}

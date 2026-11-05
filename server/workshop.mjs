@@ -21,7 +21,7 @@ export function authorizeWorkshop(old,next,user) {
     if(added.length>1)fail(400,'Submit one assignment action at a time.');
     if(!added.length)continue;
     const event=added[0],last=previous.history.at(-1);
-    if(user.role==='PARTICIPANT'){
+    if(user.role==='PARTICIPANT'||manager&&event.action==='Submitted'){
       if(event.action!=='Submitted'||last&&last.action!=='Changes_Requested')fail(403,'Submit pending work or requested corrections only.');
       if(event.note)fail(403,'Participants cannot add reviewer notes.');
     }else if(manager){

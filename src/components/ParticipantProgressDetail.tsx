@@ -1,3 +1,4 @@
+import { accessFor } from '../../shared/access.mjs';
 import { useState } from 'react';
 import type { Participant, ICLMember, PAWBatch, InterventionEvent } from '@/types/paw';
 import type { LoginUser } from '@/lib/api';
@@ -9,7 +10,7 @@ type Props = {participant:Participant;members:ICLMember[];batch?:PAWBatch;user:L
 export function ParticipantProgressDetail({participant:p,members,batch,user,onClose,onUpdate,onNavigate}:Props) {
   const ref=useDialog(onClose),r=participantProgress(p,members,batch);
   const [note,setNote]=useState(''),[date,setDate]=useState(r.intervention.due),[historyLimit,setHistoryLimit]=useState(20);
-  const allowed=['PAW_HEAD','LEADER_HEAD','LEADER','WELCOME_MEMBER'].includes(user.role);
+  const allowed=accessFor(user).includes('followups')&&['PAW_HEAD','LEADER_HEAD','LEADER','WELCOME_MEMBER'].includes(user.role);
   const timeline=participantTimeline(p,batch);
   const append=(action:InterventionEvent['action'],nextFollowupDate:string)=>{
     const event:InterventionEvent={id:crypto.randomUUID(),action,note:note.trim(),nextFollowupDate,at:new Date().toISOString(),by:user.name};

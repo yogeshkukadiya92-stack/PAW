@@ -17,6 +17,7 @@ import { formatDate, getDaysRemaining } from '@/lib/utils';
 interface HeaderProps {
   allowNavigation?: boolean;
   canCreateBatch?: boolean;
+  onEditBatch?:()=>void;
   canUseEscalations?: boolean;
   batches: PAWBatch[];
   selectedBatch: PAWBatch;
@@ -38,6 +39,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   allowNavigation = true,
   canCreateBatch = true,
+  onEditBatch,
   canUseEscalations = true,
   batches,
   selectedBatch,
@@ -88,6 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline">New PAW</span>
             </button>}
 
+            {onEditBatch&&<button className="profile-button" onClick={onEditBatch}>Edit workshop</button>}
             {onOpenManageTeamModal && (
               <button
                 onClick={onOpenManageTeamModal}

@@ -1,3 +1,4 @@
+import { whatsappPhone } from '../../shared/phone.mjs';
 import React, { useState } from 'react';
 import { 
   PhoneCall, 
@@ -20,6 +21,7 @@ import { exportLeadsToCSV } from '@/lib/export-utils';
 import { ImportLeadsModal } from '@/components/ImportLeadsModal';
 
 interface MissionCallingViewProps {
+  editable?:boolean;
   batch: PAWBatch;
   callingMembers: ICLMember[];
   leads: CallingLead[];
@@ -30,6 +32,7 @@ interface MissionCallingViewProps {
 }
 
 export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
+  editable=true,
   batch,
   callingMembers,
   leads,
@@ -235,7 +238,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
 
             {/* Import Leads button */}
             <button
-              onClick={() => setIsImportModalOpen(true)}
+              disabled={!editable} onClick={() => setIsImportModalOpen(true)}
               className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 flex items-center gap-1.5 transition whitespace-nowrap"
               title="Bulk import leads from CSV / paste"
             >
@@ -245,7 +248,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
 
             {/* Add New Lead button */}
             <button
-              onClick={() => setIsAddingLead(!isAddingLead)}
+              disabled={!editable} onClick={() => setIsAddingLead(!isAddingLead)}
               className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-xs transition whitespace-nowrap"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -290,7 +293,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
               <input
                 type="text"
                 required
-                placeholder="e.g. Ketan Mehta"
+                aria-label="Lead full name" placeholder="e.g. Ketan Mehta"
                 value={newLeadName}
                 onChange={(e) => setNewLeadName(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-blue-500"
@@ -301,7 +304,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
               <input
                 type="tel"
                 required
-                placeholder="+91 98250 12345"
+                aria-label="Lead phone number" placeholder="+91 98250 12345"
                 value={newLeadPhone}
                 onChange={(e) => setNewLeadPhone(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-blue-500"
@@ -311,7 +314,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
               <label className="block text-slate-600 mb-1">City</label>
               <input
                 type="text"
-                value={newLeadCity}
+                aria-label="Lead city" value={newLeadCity}
                 onChange={(e) => setNewLeadCity(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-blue-500"
               />
@@ -319,7 +322,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
             <div>
               <label className="block text-slate-600 mb-1">Assign Calling Member</label>
               <select
-                value={newLeadMemberId}
+                aria-label="Assign calling member" value={newLeadMemberId}
                 onChange={(e) => setNewLeadMemberId(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
               >
@@ -422,7 +425,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
 
                           {/* WhatsApp */}
                           <a
-                            href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                            href={`https://wa.me/${whatsappPhone(lead.phone)}?text=${encodeURIComponent(
                               `Hello ${lead.fullName}, this is regarding your registration for the Personality Awareness Workshop (PAW) - ${batch.name}.`
                             )}`}
                             target="_blank"
@@ -435,7 +438,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
 
                           {/* Log Call */}
                           <button
-                            onClick={() => onOpenCallLog(lead)}
+                            disabled={!editable} onClick={() => onOpenCallLog(lead)}
                             className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-medium transition"
                           >
                             Log Call
@@ -444,7 +447,7 @@ export const MissionCallingView: React.FC<MissionCallingViewProps> = ({
                           {/* Register & Handover */}
                           {lead.callStatus !== 'REGISTERED' && (
                             <button
-                              onClick={() => onRegisterAndHandover(lead)}
+                              disabled={!editable} onClick={() => onRegisterAndHandover(lead)}
                               className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-semibold transition"
                               title="Register & Handover to Welcome Team"
                             >

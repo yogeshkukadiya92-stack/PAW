@@ -1,3 +1,4 @@
+import { whatsappPhone } from '../../shared/phone.mjs';
 import { useDialog } from '@/lib/use-dialog';
 import React, { useState } from 'react';
 import { 
@@ -97,7 +98,7 @@ const WelcomeChecklistModalContent: React.FC<WelcomeChecklistModalProps> = ({
             <span>Welcome Call</span>
           </a>
           <a
-            href={`https://wa.me/${participant.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+            href={`https://wa.me/${whatsappPhone(participant.phone)}?text=${encodeURIComponent(
               `Hello ${participant.fullName}, this is your ICL Welcome Call follow-up for the PAW Workshop. Your Login ID is ${participant.loginId}.`
             )}`}
             target="_blank"
