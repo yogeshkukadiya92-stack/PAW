@@ -272,3 +272,21 @@ test('post-workshop updates cannot be recorded before the final workshop end dat
   assert.equal(result.status,400);
  }finally{await env.close();}
 });
+
+test('participant signup requires setup, ignores privilege claims, signs in and waits for verified assignment',async()=>{
+ const env=await environment();try{
+  const newUser=env.client();assert.equal((await newUser.request('/api/auth/signup','POST',{name:'New Participant',username:'new.person',password:personal})).status,409);
+  const {admin}=await fixture(env);
+  const created=await newUser.request('/api/auth/signup','POST',{name:'New Participant',username:'new.person',password:personal,role:'PAW_HEAD',participantId:'participant-1',memberId:'leader-1'});
+  assert.equal(created.status,201);assert.equal(created.body.user.role,'PARTICIPANT');assert.ok(!created.body.user.participantId);assert.ok(!created.body.user.memberId);
+  const pending=await newUser.request('/api/state');assert.equal(pending.body.data.participants.length,0);assert.equal(pending.body.data.batches.length,0);
+  assert.equal((await newUser.request('/api/accounts')).status,403);
+  assert.equal((await newUser.request(`/api/accounts/${created.body.user.id}`,'PATCH',{participantId:'participant-1'})).status,403);
+  assert.equal((await admin.request(`/api/accounts/${created.body.user.id}`,'PATCH',{participantId:'participant-1'})).status,200);
+  assert.equal((await newUser.request('/api/state')).status,401);
+  assert.equal((await newUser.request('/api/auth/login','POST',{username:'new.person',password:personal})).status,200);
+  assert.deepEqual((await newUser.request('/api/state')).body.data.participants.map(p=>p.id),['participant-1']);
+  assert.equal((await admin.request(`/api/accounts/${created.body.user.id}`,'PATCH',{participantId:'participant-2'})).status,400);
+  assert.equal((await env.client().request('/api/auth/signup','POST',{name:'Duplicate',username:'new.person',password:personal})).status,409);
+ }finally{await env.close();}
+});

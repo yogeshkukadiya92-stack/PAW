@@ -478,7 +478,7 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
       <div id="my-maintenance"><WorkshopMaintenance participants={[participant]} batch={personalBatch} members={members} user={user} onUpdate={()=>{}}/></div>
       <AssessmentExperienceModal participant={participant} isOpen={isAssessmentOpen} onClose={()=>setIsAssessmentOpen(false)} onSaveProgress={handleSaveAnswersProgress} onComplete={handleProfileComplete}/>
       <CertificateModal participant={selectedParticipantForCertificate} batch={personalBatch} isOpen={isCertificateOpen} onClose={()=>setIsCertificateOpen(false)}/>
-    </>:<div className="profile-panel"><h1>Your workshop profile is pending</h1><p className="profile-muted">Ask your PAW Head to link your participant record and workshop.</p></div>}</main></div>;
+    </>:<div className="profile-panel"><h1>Your account is ready</h1><p className="profile-muted">You are signed in. Your PAW Head will verify your registration and connect this account to your workshop. Your assignments and sessions will appear here once it is linked.</p></div>}</main></div>;
   }
 
   return (

@@ -20,8 +20,8 @@ function readGuest():Guest|null {
     return parsed;
   }catch{return null;}
 }
-interface Props {participant?:Participant;onSignIn?:()=>void;onExit?:()=>void;onSaveProgress?:(id:string,answers:Record<number,string>)=>void;onComplete?:(id:string,report:AssessmentReport)=>void;}
-export function AssessmentExperience({participant,onSignIn,onExit,onSaveProgress,onComplete}:Props) {
+interface Props {participant?:Participant;onSignIn?:()=>void;onSignUp?:()=>void;onExit?:()=>void;onSaveProgress?:(id:string,answers:Record<number,string>)=>void;onComplete?:(id:string,report:AssessmentReport)=>void;}
+export function AssessmentExperience({participant,onSignIn,onSignUp,onExit,onSaveProgress,onComplete}:Props) {
   const [guest]=useState(()=>participant?null:readGuest());
   const [language,setLanguage]=useState<AssessmentLanguage>(participant?.preferredLanguage||guest?.language||'en');
   const [details,setDetails]=useState<Details>(()=>{
@@ -58,7 +58,7 @@ export function AssessmentExperience({participant,onSignIn,onExit,onSaveProgress
   };
   const retry=()=>{setAnswers({});setActiveReport(null);nextStep(2);};
   return <div className={`profile-app ${mobile?'profile-mobile-preview':''}`} ref={root} lang={language}>
-    <ProfileHeader language={language} onLanguage={setLanguage} onSignIn={onSignIn} onDashboard={onExit} onMobile={()=>setMobile(!mobile)} mobile={mobile} onHome={()=>nextStep(1)}/>
+    <ProfileHeader language={language} onLanguage={setLanguage} onSignIn={onSignIn} onSignUp={onSignUp} onDashboard={onExit} onMobile={()=>setMobile(!mobile)} mobile={mobile} onHome={()=>nextStep(1)}/>
     <div className="profile-container">
       <nav className="profile-stepper no-print" aria-label="Assessment progress">{[t.basicDetails,t.questions,t.yourReport].map((label,index)=><div key={index} className={step>=index+1?'active':''} aria-current={step===index+1?'step':undefined}><span>{step>index+1?<Check size={15}/>:index+1}</span><strong>{label}</strong></div>)}</nav>
       {(error||storageError)&&<p role="alert" className="profile-error no-print">{error||storageError}</p>}

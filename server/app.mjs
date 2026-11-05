@@ -129,6 +129,18 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
             return reply(res,201,{user});
           } catch (e) { db.exec('ROLLBACK'); throw e; }
         }
+        if (path === '/api/auth/signup' && method === 'POST') {
+          throttle(`signup:${req.socket.remoteAddress}`);
+          if (!countUsers()) throw failure(409,'The administrator must finish workspace setup before participant sign up opens.');
+          const input=await body(req);const username=checkUsername(input.username);
+          const name=typeof input.name==='string'?input.name.trim():'';
+          if(!name||name.length>120)throw failure(400,'Enter your full name.');
+          const hash=await hashPassword(input.password);
+          // Public signup never grants staff permissions or claims an existing participant.
+          const user=insertUser({username,name,role:'PARTICIPANT',mustChangePassword:false},hash);
+          const oldToken=tokenFrom(req);if(oldToken)db.prepare('DELETE FROM sessions WHERE hash=?').run(digest(oldToken));
+          setSession(res,user.id);audit(user.id,'participant_signup');return reply(res,201,{user});
+        }
         if (path === '/api/auth/login' && method === 'POST') {
           const input = await body(req); const username = typeof input.username === 'string' ? input.username.trim().toLowerCase().slice(0,80) : '';
           const key = `login:${req.socket.remoteAddress}:${digest(username)}`;
@@ -194,11 +206,19 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
           const id = accountMatch[1]; if (id === user.id) throw failure(400,'Use Change password for your own account.');
           const target = db.prepare('SELECT * FROM users WHERE id=?').get(id); if (!target) throw failure(404,'Account not found.');
           const input = await body(req);
-          if (typeof input.active !== 'boolean' && !input.password) throw failure(400,'Choose an account action.');
+          if (typeof input.active !== 'boolean' && !input.password && !input.participantId) throw failure(400,'Choose an account action.');
           const hash = input.password ? await hashPassword(input.password) : null;
           if (!actor(req) || !isAdmin(actor(req))) throw failure(403,'Your permissions have changed.');
           db.exec('BEGIN IMMEDIATE');
           try {
+            if (input.participantId) {
+              if(target.role!=='PARTICIPANT'||target.participant_id)throw failure(400,'Only an unassigned participant account can be linked.');
+              const person=readState().data.participants.find(p=>p.id===input.participantId);
+              if(!person)throw failure(400,'Choose an existing participant.');
+              if(db.prepare('SELECT id FROM users WHERE participant_id=?').get(person.id))throw failure(409,'This participant already has an account.');
+              db.prepare('UPDATE users SET participant_id=?, name=? WHERE id=?').run(person.id,person.fullName,id);
+              audit(user.id,'signup_participant_linked');
+            }
             if (typeof input.active === 'boolean') db.prepare('UPDATE users SET active=? WHERE id=?').run(input.active?1:0,id);
             if (hash) db.prepare('UPDATE users SET password_hash=?, must_change=1 WHERE id=?').run(hash,id);
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(id); audit(user.id,hash ? 'password_reset' : 'account_status_changed'); db.exec('COMMIT');
