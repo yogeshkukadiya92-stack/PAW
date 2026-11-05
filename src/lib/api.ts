@@ -1,7 +1,7 @@
 import type { PAWBatch, ICLMember, CallingLead, Participant, UserRole } from '@/types/paw';
 export type LoginRole = UserRole | 'PARTICIPANT';
 export interface LoginUser {
-  id: string; username: string; name: string; role: LoginRole; memberId?: string; participantId?: string;
+  permissions?: string[]; id: string; username: string; name: string; role: LoginRole; memberId?: string; participantId?: string;
   active: boolean; mustChangePassword: boolean; createdAt: string;
 }
 export interface WorkspaceData { batches: PAWBatch[]; members: ICLMember[]; leads: CallingLead[]; participants: Participant[]; }

@@ -1,3 +1,4 @@
+import { ACCESS, accessFor } from '../shared/access.mjs';
 import { validateCompletionChanges, validateMaintenanceChanges } from './workshop.mjs';
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
@@ -25,6 +26,7 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
     CREATE TABLE IF NOT EXISTS question_bank (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, user_id TEXT, action TEXT NOT NULL, created_at TEXT NOT NULL);
   `);
+  if(!db.prepare('PRAGMA table_info(users)').all().some(c=>c.name==='permissions'))db.exec('ALTER TABLE users ADD COLUMN permissions TEXT');
   db.prepare('INSERT OR IGNORE INTO app_state VALUES (1, 0, ?)').run(JSON.stringify(emptyState()));
   db.prepare('INSERT OR IGNORE INTO question_bank VALUES(1,0,?)').run('{}');
   const readBank = () => { const row=db.prepare('SELECT revision,value FROM question_bank WHERE id=1').get();return {revision:Number(row.revision),overrides:JSON.parse(row.value)}; };
@@ -94,7 +96,7 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
   };
   const insertUser = (details, passwordHash) => {
     const id = randomUUID();
-    try { db.prepare('INSERT INTO users VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,details.username,details.name,details.role,details.memberId || null,details.participantId || null,passwordHash,1,details.mustChangePassword ? 1 : 0,new Date().toISOString()); }
+    try { db.prepare('INSERT INTO users (id,username,name,role,member_id,participant_id,password_hash,active,must_change,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,details.username,details.name,details.role,details.memberId || null,details.participantId || null,passwordHash,1,details.mustChangePassword ? 1 : 0,new Date().toISOString()); }
     catch (e) { if (String(e.message).includes('UNIQUE')) throw failure(409,'This login ID or person already has an account.'); throw e; }
     return publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(id));
   };
@@ -129,18 +131,7 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
             return reply(res,201,{user});
           } catch (e) { db.exec('ROLLBACK'); throw e; }
         }
-        if (path === '/api/auth/signup' && method === 'POST') {
-          throttle(`signup:${req.socket.remoteAddress}`);
-          if (!countUsers()) throw failure(409,'The administrator must finish workspace setup before participant sign up opens.');
-          const input=await body(req);const username=checkUsername(input.username);
-          const name=typeof input.name==='string'?input.name.trim():'';
-          if(!name||name.length>120)throw failure(400,'Enter your full name.');
-          const hash=await hashPassword(input.password);
-          // Public signup never grants staff permissions or claims an existing participant.
-          const user=insertUser({username,name,role:'PARTICIPANT',mustChangePassword:false},hash);
-          const oldToken=tokenFrom(req);if(oldToken)db.prepare('DELETE FROM sessions WHERE hash=?').run(digest(oldToken));
-          setSession(res,user.id);audit(user.id,'participant_signup');return reply(res,201,{user});
-        }
+        if (path === '/api/auth/signup') throw failure(403,'Public sign up is disabled. Ask your administrator to create your staff account.');
         if (path === '/api/auth/login' && method === 'POST') {
           const input = await body(req); const username = typeof input.username === 'string' ? input.username.trim().toLowerCase().slice(0,80) : '';
           const key = `login:${req.socket.remoteAddress}:${digest(username)}`;
@@ -189,16 +180,25 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
           const input = await body(req); const username = checkUsername(input.username);
           if (!ROLES.includes(input.role)) throw failure(400,'Choose a valid role.');
           const state = readState().data;
-          const person = input.role === 'PARTICIPANT' ? state.participants.find(p => p.id === input.participantId)
+          let person = input.role === 'PARTICIPANT' ? state.participants.find(p => p.id === input.participantId)
             : state.members.find(m => m.id === input.memberId && m.role === input.role);
+          const createMember=!person&&input.role!=='PARTICIPANT'&&typeof input.name==='string'&&input.name.trim();
+          if(createMember){
+            if(input.name.trim().length>120)throw failure(400,'Name must be at most 120 characters.');
+            person={id:`member-${randomUUID()}`,name:input.name.trim(),phone:'',email:'',role:input.role,team:input.role==='CALLING_MEMBER'?'CALLING':input.role==='WELCOME_MEMBER'?'WELCOME_FOLLOWUP':'LEADERSHIP',isAvailable:true,...(input.role==='CALLING_MEMBER'?{callingCapacity:25}:{})};
+          }
           if (!person) throw failure(400,'Select an existing person with the matching role.');
           const hash = await hashPassword(input.password);
           // Recheck the actor and linked record after asynchronous password hashing.
           if (!actor(req) || !isAdmin(actor(req))) throw failure(403,'Your permissions have changed.');
           const fresh = readState().data;
-          if (input.role === 'PARTICIPANT' ? !fresh.participants.some(p => p.id === input.participantId) : !fresh.members.some(m => m.id === input.memberId && m.role === input.role)) throw failure(409,'This person changed while creating the login.');
+          if (!createMember && (input.role === 'PARTICIPANT' ? !fresh.participants.some(p => p.id === input.participantId) : !fresh.members.some(m => m.id === input.memberId && m.role === input.role))) throw failure(409,'This person changed while creating the login.');
+          db.exec('BEGIN IMMEDIATE');
+          try {
+          if(createMember){const snapshot=readState();snapshot.data.members.push(person);validateState(snapshot.data);writeState(snapshot.data,snapshot.revision+1);}
           const account = insertUser({username,name:person.fullName || person.name,role:input.role,memberId:input.role === 'PARTICIPANT' ? null : person.id,participantId:input.role === 'PARTICIPANT' ? person.id : null,mustChangePassword:true},hash);
-          audit(user.id,'account_created'); return reply(res,201,{account});
+          audit(user.id,'account_created');db.exec('COMMIT'); return reply(res,201,{account});
+          }catch(error){db.exec('ROLLBACK');throw error;}
         }
         const accountMatch = path.match(/^\/api\/accounts\/([^/]+)$/);
         if (accountMatch && method === 'PATCH') {
@@ -206,7 +206,8 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
           const id = accountMatch[1]; if (id === user.id) throw failure(400,'Use Change password for your own account.');
           const target = db.prepare('SELECT * FROM users WHERE id=?').get(id); if (!target) throw failure(404,'Account not found.');
           const input = await body(req);
-          if (typeof input.active !== 'boolean' && !input.password && !input.participantId) throw failure(400,'Choose an account action.');
+          if(input.permissions!==undefined&&(!Array.isArray(input.permissions)||input.permissions.some(p=>!Object.hasOwn(ACCESS,p))||target.role==='PAW_HEAD'))throw failure(400,'Choose valid staff permissions. Main Admin always has full access.');
+          if (typeof input.active !== 'boolean' && !input.password && !input.participantId && input.permissions===undefined) throw failure(400,'Choose an account action.');
           const hash = input.password ? await hashPassword(input.password) : null;
           if (!actor(req) || !isAdmin(actor(req))) throw failure(403,'Your permissions have changed.');
           db.exec('BEGIN IMMEDIATE');
@@ -219,12 +220,14 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
               db.prepare('UPDATE users SET participant_id=?, name=? WHERE id=?').run(person.id,person.fullName,id);
               audit(user.id,'signup_participant_linked');
             }
+            if(input.permissions!==undefined)db.prepare('UPDATE users SET permissions=? WHERE id=?').run(JSON.stringify([...new Set(input.permissions)]),id);
             if (typeof input.active === 'boolean') db.prepare('UPDATE users SET active=? WHERE id=?').run(input.active?1:0,id);
             if (hash) db.prepare('UPDATE users SET password_hash=?, must_change=1 WHERE id=?').run(hash,id);
             db.prepare('DELETE FROM sessions WHERE user_id=?').run(id); audit(user.id,hash ? 'password_reset' : 'account_status_changed'); db.exec('COMMIT');
           } catch(e) {db.exec('ROLLBACK');throw e;}
           return reply(res,200,{account:publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(id))});
         }
+        if (path === '/api/state' && !accessFor(user).includes('workspace'))throw failure(403,'Workspace access is disabled. Contact your administrator.');
         if (path === '/api/state' && method === 'GET') {
           const snapshot = readState(); return reply(res,200,{revision:snapshot.revision,data:visibleState(snapshot.data,user)});
         }

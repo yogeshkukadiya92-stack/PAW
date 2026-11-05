@@ -1,3 +1,4 @@
+import { checkAccessChange } from '../shared/access.mjs';
 import { authorizeWorkshop, validateWorkshop, stampAttendance, authorizeIntervention, authorizeCompletion, authorizeMaintenance } from './workshop.mjs';
 import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -36,7 +37,7 @@ export async function verifyPassword(password, stored) {
 export function publicUser(row) {
   return { id: row.id, username: row.username, name: row.name, role: row.role,
     memberId: row.member_id || undefined, participantId: row.participant_id || undefined,
-    active: Boolean(row.active), mustChangePassword: Boolean(row.must_change), createdAt: row.created_at };
+    permissions: row.permissions ? JSON.parse(row.permissions) : undefined, active: Boolean(row.active), mustChangePassword: Boolean(row.must_change), createdAt: row.created_at };
 }
 export function descendantIds(members, memberId) {
   const ids=new Set(memberId?[memberId]:[]);let changed=true;
@@ -67,6 +68,7 @@ const welcomeFields = ['maintenanceEvents', 'interventionEvents', 'sessionAttend
 const callingFields = ['callStatus', 'callLogs', 'nextFollowupDate', 'lastCalledAt'];
 const changedFields = (before, after) => new Set([...Object.keys(before), ...Object.keys(after)].filter(key => JSON.stringify(before[key]) !== JSON.stringify(after[key])));
 export function authorizeChange(collection, old, next, user, state) {
+  const accessError=checkAccessChange(collection,old,next,user);if(accessError)throw failure(403,accessError);
   if (collection === 'participants' && next) { authorizeMaintenance(old,next,user); authorizeCompletion(old,next,user); authorizeIntervention(old,next,user); authorizeWorkshop(old,next,user); stampAttendance(old,next,user); }
   if (isAdmin(user)) return;
   if (collection === 'members' || collection === 'batches' || !next) throw failure(403, 'Only the PAW Head can manage batches and team members.');

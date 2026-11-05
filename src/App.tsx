@@ -1,3 +1,4 @@
+import { accessFor, checkAccessChange } from '../shared/access.mjs';
 import { LayoutDashboard, ClipboardCheck, CalendarDays, Award, HeartHandshake, FileChartColumn, Users, BookOpen, Settings2 } from 'lucide-react';
 import { WorkshopMaintenance } from '@/components/WorkshopMaintenance';
 import { WorkshopCompletion } from '@/components/WorkshopCompletion';
@@ -45,7 +46,13 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
   const { data, setData, saveStatus, saveError, retry, reload } = useWorkspace(initialState);
   const { batches, members, leads, participants } = data;
   const updateCollection = <K extends keyof WorkspaceData>(key: K, update: React.SetStateAction<WorkspaceData[K]>) => {
-    setData(prev => ({...prev, [key]: typeof update === 'function' ? (update as (value: WorkspaceData[K]) => WorkspaceData[K])(prev[key]) : update}));
+    const next = typeof update === 'function' ? (update as (value: WorkspaceData[K]) => WorkspaceData[K])(data[key]) : update;
+    for (const row of next) {
+      const before=data[key].find(item=>item.id===row.id);
+      const denied=checkAccessChange(key,before,row,user);
+      if(denied){showToast(denied);return;}
+    }
+    setData(prev => ({...prev,[key]:next}));
   };
   const setBatches = (value: React.SetStateAction<PAWBatch[]>) => updateCollection('batches', value);
   const setMembers = (value: React.SetStateAction<ICLMember[]>) => updateCollection('members', value);
@@ -487,6 +494,7 @@ export default function App({ user, initialState, onLogout, onUserChange }: AppP
 
       {/* Main Content Area */}
       <main className="profile-container w-full flex-1">
+        {user.role!=='PAW_HEAD'&&accessFor(user).length===1&&<p className="profile-saved">Read-only access. Contact your administrator to change permissions.</p>}
         <div className="profile-dashboard-heading"><h1>{roleLabels[user.role]} dashboard</h1><p className="profile-muted">Track workshop progress, assignments and attendance according to your assigned position.</p></div>
         <nav className="profile-dashboard-tabs no-print" aria-label="Dashboard sections" role="tablist">{([['progress','Workshop progress'],['assignments','Assignments'],['sessions','Sessions & attendance'],['completion','Completion'],['maintenance','30 / 60 / 90-day follow-ups'],['reports','Test reports'],['participants','Participants'],...(user.role==='PAW_HEAD'?[['questions','Question bank']]:[]),['operations','Workshop operations']] as [DashboardTab | 'progress' | 'assignments' | 'sessions' | 'completion' | 'maintenance',string][]).map(([key,label])=><button role="tab" key={key} aria-selected={dashboardTab===key} onClick={()=>setDashboardTab(key)}>{React.createElement(({progress:LayoutDashboard,assignments:ClipboardCheck,sessions:CalendarDays,completion:Award,maintenance:HeartHandshake,reports:FileChartColumn,participants:Users,questions:BookOpen,operations:Settings2})[key],{size:18,'aria-hidden':true})}<span>{label}</span>{key==='reports'&&<small>{participants.reduce((total,p)=>total+participantReports(p).length,0)}</small>}{key==='participants'&&<small>{participants.length}</small>}</button>)}</nav>
       <WorkshopReminders participants={participants} batches={batches} user={user} onOpen={r=>{setSelectedBatchId(r.batchId);setDashboardTab(r.section);if(r.section==='progress')setProgressBatchId(r.batchId);}}/>
