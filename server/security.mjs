@@ -10,8 +10,8 @@ export const isAdmin = user => user.role === 'PAW_HEAD';
 export const digest = value => createHash('sha256').update(value).digest('hex');
 export function failure(status, message) { return Object.assign(new Error(message), { status }); }
 export function checkPassword(password) {
-  if (typeof password !== 'string' || password.length < 12 || password.length > 128) {
-    throw failure(400, 'Use a password between 12 and 128 characters.');
+  if (typeof password !== 'string' || password.length < 5 || password.length > 128) {
+    throw failure(400, 'Use a password between 5 and 128 characters.');
   }
 }
 export function checkUsername(value) {

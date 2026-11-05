@@ -41,7 +41,7 @@ test('first account, strong passwords, session cookie, generic login failure, lo
   const env=await environment();try{
     const client=env.client();assert.equal((await client.request('/api/state')).status,401);
     assert.equal((await client.request('/api/auth/status')).body.setupRequired,true);
-    assert.equal((await client.request('/api/auth/setup','POST',{username:'owner',name:'Owner',password:'short'})).status,400);
+    assert.equal((await client.request('/api/auth/setup','POST',{username:'owner',name:'Owner',password:'tiny'})).status,400);
     const result=await client.request('/api/auth/setup','POST',{username:'owner',name:'Owner',password:personal});assert.equal(result.status,201);assert.match(result.cookie,/HttpOnly/);assert.match(result.cookie,/SameSite=Strict/);
     assert.equal((await client.request('/api/auth/setup','POST',{username:'another',name:'Other',password:personal})).status,409);
     assert.equal((await env.client().request('/api/auth/login','POST',{username:'missing',password:'wrong'})).body.error,'Login ID or password is incorrect.');
@@ -288,5 +288,13 @@ test('participant signup requires setup, ignores privilege claims, signs in and 
   assert.deepEqual((await newUser.request('/api/state')).body.data.participants.map(p=>p.id),['participant-1']);
   assert.equal((await admin.request(`/api/accounts/${created.body.user.id}`,'PATCH',{participantId:'participant-2'})).status,400);
   assert.equal((await env.client().request('/api/auth/signup','POST',{name:'Duplicate',username:'new.person',password:personal})).status,409);
+ }finally{await env.close();}
+});
+
+test('five-character passwords support setup and sign-in; four characters are rejected',async()=>{
+ const env=await environment();try{
+ const client=env.client();assert.equal((await client.request('/api/auth/setup','POST',{username:'owner',name:'Owner',password:'abcd'})).status,400);
+ assert.equal((await client.request('/api/auth/setup','POST',{username:'owner',name:'Owner',password:'abcde'})).status,201);
+ assert.equal((await env.client().request('/api/auth/login','POST',{username:'owner',password:'abcde'})).status,200);
  }finally{await env.close();}
 });
