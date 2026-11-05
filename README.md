@@ -139,3 +139,13 @@ Run `node qa/progress/check.mjs` for progress, report, reminder and readiness ch
 The post-workshop tab calculates three milestones from each workshop's end date using calendar days. Staff can record Completed, Unreachable, Support Required or Rescheduled, with a note and a next date for any unfinished outcome. The latest entry controls the current status; all earlier entries remain in the participant activity timeline. A retry date replaces the active due date while preserving the original milestone date.
 
 Only administrators, assigned leaders and the participant's assigned welcome member can record follow-ups. Participants have a read-only view of their own schedule and results. Entries open on the workshop's end date. Due and overdue milestones appear in app reminders and the leader queue; support requests remain visible even with a future retry date. Filters cover participant, member, milestone, status and outcome, with a CSV export of the filtered results. No external messages are sent.
+
+### First Admin from Coolify environment variables
+
+Set these as **runtime** environment variables, then redeploy:
+
+- `PAW_ADMIN_EMAIL`: the email used to sign in.
+- `PAW_ADMIN_PASSWORD`: your private password (minimum 5 characters).
+- `PAW_ADMIN_NAME`: optional display name; defaults to `Main Admin`.
+
+On an empty database the server creates the Main Admin and its team record automatically. No setup form or setup token is needed for this route. Passwords are hashed in the database and never returned to the browser. These variables do not change or reset an existing account on restart. Once the first account exists, manage staff accounts inside **Manage logins**; change your own password inside the dashboard. Public registration is disabled.

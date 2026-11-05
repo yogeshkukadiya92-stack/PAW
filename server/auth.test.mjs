@@ -309,3 +309,21 @@ test('admin creates staff member and login together without a separate team setu
  assert.equal((await admin.request('/api/state')).body.data.members.length,before);
  }finally{await env.close();}
 });
+
+test('environment admin credentials bootstrap once and never overwrite an existing account',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'paw-env-'));const dbPath=join(dir,'app.sqlite');
+  let env;
+  try {
+    env=await environment({dbPath,adminEmail:'Owner@Example.com',adminPassword:'abcde',adminName:'Workspace Owner'});
+    assert.equal((await env.client().request('/api/auth/status')).body.setupRequired,false);
+    const client=env.client();const login=await client.request('/api/auth/login','POST',{username:'owner@example.com',password:'abcde'});
+    assert.equal(login.status,200);assert.equal(login.body.user.role,'PAW_HEAD');
+    assert.equal((await client.request('/api/state')).body.data.members[0].email,'owner@example.com');
+    await env.close();env=null;
+    env=await environment({dbPath,adminEmail:'other@example.com',adminPassword:'different'});
+    assert.equal((await env.client().request('/api/auth/login','POST',{username:'owner@example.com',password:'abcde'})).status,200);
+    assert.equal((await env.client().request('/api/auth/login','POST',{username:'other@example.com',password:'different'})).status,401);
+  }finally{if(env)await env.close();await rm(dir,{recursive:true,force:true});}
+  await assert.rejects(createApp({dbPath:':memory:',adminEmail:'owner@example.com',adminPassword:''}),/Set both/);
+  await assert.rejects(createApp({dbPath:':memory:',adminEmail:'invalid',adminPassword:'abcde'}),/valid email/);
+});

@@ -12,7 +12,7 @@ const emptyState = () => ({ batches: [], members: [], leads: [], participants: [
 const cookieName = 'paw_session';
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2'};
 
-export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || resolve('data/paw.sqlite'), production = process.env.NODE_ENV === 'production', appOrigin = process.env.PAW_APP_ORIGIN, setupToken = process.env.PAW_SETUP_TOKEN || '', distPath = resolve('dist') } = {}) {
+export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || resolve('data/paw.sqlite'), production = process.env.NODE_ENV === 'production', appOrigin = process.env.PAW_APP_ORIGIN, setupToken = process.env.PAW_SETUP_TOKEN || '', adminEmail = process.env.PAW_ADMIN_EMAIL || '', adminPassword = process.env.PAW_ADMIN_PASSWORD || '', adminName = process.env.PAW_ADMIN_NAME || 'Main Admin', distPath = resolve('dist') } = {}) {
   if (dbPath !== ':memory:') { mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 }); }
   const db = new DatabaseSync(dbPath);
   if (dbPath !== ':memory:') chmodSync(dbPath, 0o600);
@@ -100,6 +100,28 @@ export async function createApp({ dbPath = process.env.PAW_DATABASE_PATH || reso
     catch (e) { if (String(e.message).includes('UNIQUE')) throw failure(409,'This login ID or person already has an account.'); throw e; }
     return publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(id));
   };
+  // Environment credentials bootstrap an empty workspace only; never reset an existing account.
+  if (!countUsers() && (adminEmail || adminPassword)) {
+    try {
+      if (!adminEmail || !adminPassword) throw new Error('Set both PAW_ADMIN_EMAIL and PAW_ADMIN_PASSWORD.');
+      const username = checkUsername(adminEmail);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username)) throw new Error('PAW_ADMIN_EMAIL must be a valid email address.');
+      const name = String(adminName).trim();
+      if (!name || name.length > 120) throw new Error('PAW_ADMIN_NAME must contain 1 to 120 characters.');
+      const hash = await hashPassword(adminPassword);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if (!countUsers()) {
+          const memberId = `member-${randomUUID()}`;
+          const user = insertUser({username,name,role:'PAW_HEAD',memberId},hash);
+          const {data,revision} = readState();
+          data.members.push({id:memberId,name,phone:'',email:username,role:'PAW_HEAD',team:'LEADERSHIP',isAvailable:true});
+          writeState(data,revision+1); audit(user.id,'owner_environment_setup');
+        }
+        db.exec('COMMIT');
+      } catch(error) { db.exec('ROLLBACK'); throw error; }
+    } catch(error) { db.close(); throw error; }
+  }
   const server = createServer(async (req,res) => {
     res.setHeader('X-Content-Type-Options','nosniff'); res.setHeader('X-Frame-Options','DENY'); res.setHeader('Referrer-Policy','same-origin');
     if (production) {
